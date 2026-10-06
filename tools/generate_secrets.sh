@@ -108,9 +108,9 @@ main() {
 
     if [[ ! -d "$SECRETS_DIR" ]]; then
         info "Creating secrets directory: $SECRETS_DIR"
-        mkdir -p "$SECRETS_DIR"
-        chmod 700 "$SECRETS_DIR"
     fi
+    mkdir -p "$SECRETS_DIR"
+    chmod 700 "$SECRETS_DIR"
 
     if [[ -f "$SECRETS_DIR/encryption-key" ]] && [[ "$force" != true ]]; then
         info "Encryption key already exists, skipping (use --force to regenerate)"
@@ -118,7 +118,6 @@ main() {
         info "Generating credential encryption key..."
         clear_path "$SECRETS_DIR/encryption-key"
         generate_encryption_key > "$SECRETS_DIR/encryption-key"
-        chmod 600 "$SECRETS_DIR/encryption-key"
         info "  Encryption key: $SECRETS_DIR/encryption-key"
     fi
 
@@ -142,7 +141,20 @@ main() {
         info "  Point EP_AO_JWT_PUBLIC_KEY_FILE at AO's jwt-primary.pub to verify real Syntara tokens"
     fi
 
-    chmod -R +r "${SECRETS_DIR}"
+    # Bind-mounted files must be readable by container UID 1001. Keep private
+    # keys 0600; the 0700 directory is what blocks other local users.
+    if [[ -f "$SECRETS_DIR/encryption-key" ]]; then
+        chmod 644 "$SECRETS_DIR/encryption-key"
+    fi
+    if [[ -f "$jwt_pub" ]]; then
+        chmod 644 "$jwt_pub"
+    fi
+    if [[ -f "$SECRETS_DIR/jwt-primary.pem" ]]; then
+        chmod 600 "$SECRETS_DIR/jwt-primary.pem"
+    fi
+    if [[ -f "$SECRETS_DIR/jwt-primary.pub" ]]; then
+        chmod 644 "$SECRETS_DIR/jwt-primary.pub"
+    fi
 
     echo ""
     info "Secrets are ready in $SECRETS_DIR"

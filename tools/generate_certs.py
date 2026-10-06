@@ -186,6 +186,7 @@ def main() -> None:
     args = parser.parse_args()
 
     CERTS_DIR.mkdir(parents=True, exist_ok=True)
+    CERTS_DIR.parent.chmod(stat.S_IRWXU)
     CERTS_DIR.chmod(stat.S_IRWXU)
 
     ca_pem = CERTS_DIR / "ca.pem"
