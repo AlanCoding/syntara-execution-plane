@@ -132,6 +132,9 @@ jobs:
             printf "EP_IT_K8S_CA_CERT<<EOF\n%s\nEOF\n" "${ca_cert_pem}"
           } >> "$GITHUB_ENV"
 
+      - name: Run Alembic migrations
+        run: uv run alembic -c alembic.ini upgrade head
+
       - name: Run PostgreSQL persistence tests
         run: uv run pytest tests/integration/test_postgres_persistence_types.py -v
 
