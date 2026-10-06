@@ -1,10 +1,17 @@
-.PHONY: install test lint format typecheck migrate image secrets certs setup compose-up compose-down
+.PHONY: install test test-integration test-integration-coverage lint format typecheck migrate image secrets certs setup compose-up compose-down
 
 install:
 	uv sync --locked --all-groups
 
 test:
 	uv run pytest
+
+test-integration:
+	uv run pytest tests/integration -m integration -v
+
+test-integration-coverage:
+	uv run pytest tests/integration -m integration -v \
+		--cov=src/execution_plane --cov-report=term-missing --cov-report=xml
 
 lint:
 	uv run ruff check src tests

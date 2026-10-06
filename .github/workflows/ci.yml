@@ -26,6 +26,128 @@ jobs:
       - run: uv run mypy --strict src
       - run: uv run pytest
 
+  test-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      EP_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+      EP_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+      EP_CREDENTIAL_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked --all-groups
+
+      # Stand up a throwaway kind cluster. The dispatcher ServiceAccount and RBAC
+      # in execution-plane-init.yaml grant the bearer token the permissions the
+      # vanilla-k8s transport needs (pod list, portforward, job CRUD).
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: integration-test
+
+      - name: Provision dispatcher ServiceAccount and RBAC
+        run: kubectl apply -f docs/feature-branch-assets/execution-plane-init.yaml
+
+      # Pre-pull the script node image onto the kind node up front. The transport
+      # uses imagePullPolicy: IfNotPresent, so with the image already present the
+      # pod starts immediately instead of racing a cold registry pull against the
+      # test's result wait. We prime via a throwaway pod rather than exec-ing into
+      # the node container: that keeps the step independent of the host container
+      # engine (no docker/podman call) — the kubelet pulls the public image onto
+      # the single kind node where the real node pods also run. We wait on the
+      # container's imageID (set once containerd has it) instead of pod readiness,
+      # so it does not matter whether the image ships a shell or exits immediately.
+      - name: Pre-pull the script node image into kind
+        run: |
+          set -euo pipefail
+          image="quay.io/ahetheri/syntara-node-script:migration-test"
+          kubectl run ep-image-prepull \
+            --namespace execution-plane \
+            --image="$image" \
+            --image-pull-policy=Always \
+            --restart=Never
+          pulled=false
+          for _ in $(seq 1 90); do
+            image_id="$(kubectl get pod ep-image-prepull -n execution-plane \
+              -o jsonpath='{.status.containerStatuses[0].imageID}' 2>/dev/null || true)"
+            if [ -n "$image_id" ]; then
+              echo "Image present on node: $image_id"
+              pulled=true
+              break
+            fi
+            reason="$(kubectl get pod ep-image-prepull -n execution-plane \
+              -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)"
+            if [ "$reason" = "ImagePullBackOff" ]; then
+              echo "::error::kubelet could not pull ${image} onto the kind node"
+              kubectl describe pod ep-image-prepull -n execution-plane || true
+              break
+            fi
+            phase="$(kubectl get pod ep-image-prepull -n execution-plane \
+              -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            echo "waiting for node image pull (phase=${phase:-unknown} reason=${reason:-none})..."
+            sleep 5
+          done
+          kubectl delete pod ep-image-prepull -n execution-plane --ignore-not-found --wait=false
+          if [ "$pulled" != "true" ]; then
+            echo "::error::Script node image was not pulled onto the kind node in time"
+            exit 1
+          fi
+
+      - name: Export cluster coordinates for the test suite
+        run: |
+          set -euo pipefail
+          endpoint="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          token="$(kubectl create token syntara-dispatcher -n execution-plane --duration=2h)"
+          echo "::add-mask::${token}"
+          ca_cert_pem="$(kubectl config view --minify --raw \
+            -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)"
+          {
+            echo "EP_IT_K8S_ENDPOINT=${endpoint}"
+            echo "EP_IT_K8S_TOKEN=${token}"
+            echo "EP_IT_K8S_NAMESPACE=execution-plane"
+            printf "EP_IT_K8S_CA_CERT<<EOF\n%s\nEOF\n" "${ca_cert_pem}"
+          } >> "$GITHUB_ENV"
+
+      - name: Run PostgreSQL persistence tests
+        run: uv run pytest tests/integration/test_postgres_persistence_types.py -v
+
+      - name: Run cluster dispatch integration tests
+        run: uv run pytest tests/integration/test_dispatch.py -m integration -v --timeout=600
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: |
+            integration-test-logs/
+          retention-days: 7
+          if-no-files-found: ignore
+
   container:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
