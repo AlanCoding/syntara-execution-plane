@@ -50,6 +50,7 @@ dev = [
     "mypy>=1.18.0,<1.19.0",
     "pytest>=9.0.0,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
+    "pytest-timeout>=2.3.0",
     "grpcio-tools==1.78.0",
     "ruff>=0.14.0,<0.14.4",
 ]
@@ -57,6 +58,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["integration: marks tests that require a real PostgreSQL database and/or Kubernetes cluster"]
 
 [tool.ruff]
 target-version = "py312"
@@ -73,6 +75,7 @@ ignore = ["D203", "D213", "COM812", "PLR0913", "TRY300", "FIX002"]
     "INP001", "S101", "ANN001", "ANN201", "D102", "D103", "PLR2004",
     "TD002", "TD003", "ARG001", "ARG002", "SLF001", "PERF401", "S110",
     "BLE001", "SIM105", "PLC0415", "D401", "PT011", "PT012", "PGH003", "SIM117",
+    "S603", "S607",
 ]
 "**/__init__.py" = ["F401", "D104"]
 

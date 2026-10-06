@@ -33,3 +33,114 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/container-build
+
+  # Runs the PostgreSQL persistence tests against a real database.
+  # No Kubernetes cluster required.
+  test-integration-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      EP_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/execution_plane
+      EP_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/execution_plane
+      EP_CREDENTIAL_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/ep-setup
+
+      - name: Run PostgreSQL persistence tests
+        run: uv run pytest tests/integration/postgres -v
+
+  # Runs the end-to-end dispatch test, which requires both PostgreSQL and a
+  # live kind (Kubernetes-in-Docker) cluster. Kept as a separate job so the
+  # postgres-only check above stays fast and clearly labelled.
+  test-integration-postgres-kind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      EP_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/execution_plane
+      EP_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/execution_plane
+      EP_CREDENTIAL_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/ep-setup
+
+      # Stand up a throwaway kind cluster. The dispatcher ServiceAccount and RBAC
+      # in execution-plane-init.yaml grant the bearer token the permissions the
+      # vanilla-k8s transport needs (pod list, portforward, job CRUD).
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: integration-test
+
+      - name: Provision dispatcher ServiceAccount and RBAC
+        run: kubectl apply -f docs/feature-branch-assets/execution-plane-init.yaml
+
+      # The transport runs node pods with imagePullPolicy: IfNotPresent. Load the
+      # image onto the kind node up front so the pod starts immediately rather
+      # than racing a cold registry pull against the dispatch startup deadline.
+      - name: Load the script node image onto the kind node
+        run: |
+          image="quay.io/ahetheri/syntara-node-script:migration-test"
+          docker pull "$image"
+          kind load docker-image "$image" --name integration-test
+
+      - name: Export cluster coordinates for the test suite
+        run: |
+          set -euo pipefail
+          endpoint="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          token="$(kubectl create token syntara-dispatcher -n execution-plane --duration=2h)"
+          echo "::add-mask::${token}"
+          ca_cert_pem="$(kubectl config view --minify --raw \
+            -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)"
+          {
+            echo "EP_IT_K8S_ENDPOINT=${endpoint}"
+            echo "EP_IT_K8S_TOKEN=${token}"
+            echo "EP_IT_K8S_NAMESPACE=execution-plane"
+            printf "EP_IT_K8S_CA_CERT<<EOF\n%s\nEOF\n" "${ca_cert_pem}"
+          } >> "$GITHUB_ENV"
+
+      - name: Run cluster dispatch integration tests
+        run: uv run pytest tests/integration/kind -m integration -v --timeout=600
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: |
+            integration-test-logs/
+          retention-days: 7
+          if-no-files-found: ignore
+
