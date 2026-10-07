@@ -71,6 +71,7 @@ select = ["ALL"]
 ignore = ["D203", "D213", "COM812", "PLR0913", "TRY300", "FIX002"]
 
 [tool.ruff.lint.per-file-ignores]
+"tools/**/*.py" = ["T201", "S404", "S603", "S607", "INP001"]
 "src/execution_plane/migrations/**/*.py" = ["INP001", "D400", "D415", "PLR0915"]
 "tests/**/*.py" = [
     "INP001", "S101", "ANN001", "ANN201", "D102", "D103", "PLR2004",

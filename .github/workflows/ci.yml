@@ -121,16 +121,12 @@ jobs:
             -c "CREATE ROLE execution_plane_runtime LOGIN" \
             -c "CREATE DATABASE execution_plane OWNER postgres"
 
-      # Stand up a throwaway kind cluster. The dispatcher ServiceAccount and RBAC
-      # in execution-plane-init.yaml grant the bearer token the permissions the
-      # vanilla-k8s transport needs (pod list, portforward, job CRUD).
-      - name: Create kind cluster
-        uses: helm/kind-action@v1
-        with:
-          cluster_name: integration-test
-
-      - name: Provision dispatcher ServiceAccount and RBAC
-        run: kubectl apply -f docs/feature-branch-assets/execution-plane-init.yaml
+      # Stand up a throwaway kind cluster. tools/ci_kind_setup.py creates the
+      # cluster, applies the dispatcher RBAC from execution-plane-init.yaml,
+      # and mints a bearer token — all without needing podman or a running EP
+      # service.  See tools/ci_kind_setup.py --help for local use.
+      - name: Create kind cluster and provision RBAC
+        run: uv run python tools/ci_kind_setup.py
 
       # Pre-pull the script node image onto the kind node up front. The transport
       # uses imagePullPolicy: IfNotPresent, so with the image already present the
@@ -185,21 +181,6 @@ jobs:
             echo "::error::Script node image was not pulled onto the kind node after 3 attempts"
             exit 1
           fi
-
-      - name: Export cluster coordinates for the test suite
-        run: |
-          set -euo pipefail
-          endpoint="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
-          token="$(kubectl create token syntara-dispatcher -n execution-plane --duration=2h)"
-          echo "::add-mask::${token}"
-          ca_cert_pem="$(kubectl config view --minify --raw \
-            -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)"
-          {
-            echo "EP_IT_K8S_ENDPOINT=${endpoint}"
-            echo "EP_IT_K8S_TOKEN=${token}"
-            echo "EP_IT_K8S_NAMESPACE=execution-plane"
-            printf "EP_IT_K8S_CA_CERT<<EOF\n%s\nEOF\n" "${ca_cert_pem}"
-          } >> "$GITHUB_ENV"
 
       - name: Run Alembic migrations
         run: uv run alembic -c alembic.ini upgrade head
