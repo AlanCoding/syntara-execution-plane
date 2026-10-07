@@ -121,12 +121,18 @@ jobs:
             -c "CREATE ROLE execution_plane_runtime LOGIN" \
             -c "CREATE DATABASE execution_plane OWNER postgres"
 
-      # Stand up a throwaway kind cluster. tools/ci_kind_setup.py creates the
-      # cluster, applies the dispatcher RBAC from execution-plane-init.yaml,
-      # and mints a bearer token — all without needing podman or a running EP
-      # service.  See tools/ci_kind_setup.py --help for local use.
+      # Stand up a throwaway kind cluster. --ci skips the podman network
+      # attachment and EP API registration steps; it applies the dispatcher
+      # RBAC from execution-plane-init.yaml, mints a bearer token for the
+      # syntara-dispatcher ServiceAccount, and writes EP_IT_K8S_* to
+      # $GITHUB_ENV.  Run with --help for local usage.
       - name: Create kind cluster and provision RBAC
-        run: uv run python tools/ci_kind_setup.py
+        run: |
+          uv run python tools/deploy_kind_execution_target.py \
+            --ci \
+            --rbac-file docs/feature-branch-assets/execution-plane-init.yaml \
+            --service-account syntara-dispatcher \
+            --token-ttl 2h
 
       # Pre-pull the script node image onto the kind node up front. The transport
       # uses imagePullPolicy: IfNotPresent, so with the image already present the
