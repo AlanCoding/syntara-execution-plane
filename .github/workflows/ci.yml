@@ -121,72 +121,40 @@ jobs:
             -c "CREATE ROLE execution_plane_runtime LOGIN" \
             -c "CREATE DATABASE execution_plane OWNER postgres"
 
-      # Stand up a throwaway kind cluster. --ci skips the podman network
-      # attachment and EP API registration steps; it applies the dispatcher
-      # RBAC from execution-plane-init.yaml, mints a bearer token for the
-      # syntara-dispatcher ServiceAccount, and writes EP_IT_K8S_* to
-      # $GITHUB_ENV.  Run with --help for local usage.
-      - name: Create kind cluster and provision RBAC
-        run: |
-          uv run python tools/deploy_kind_execution_target.py \
-            --ci \
-            --rbac-file docs/feature-branch-assets/execution-plane-init.yaml \
-            --service-account syntara-dispatcher \
-            --token-ttl 2h
+      # Stand up a throwaway kind cluster. The dispatcher ServiceAccount and RBAC
+      # in execution-plane-init.yaml grant the bearer token the permissions the
+      # vanilla-k8s transport needs (pod list, portforward, job CRUD).
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: integration-test
 
-      # Pre-pull the script node image onto the kind node up front. The transport
-      # uses imagePullPolicy: IfNotPresent, so with the image already present the
-      # pod starts immediately instead of racing a cold registry pull against the
-      # test's result wait. We prime via a throwaway pod rather than exec-ing into
-      # the node container: that keeps the step independent of the host container
-      # engine (no docker/podman call) — the kubelet pulls the public image onto
-      # the single kind node where the real node pods also run. We wait on the
-      # container's imageID (set once containerd has it) instead of pod readiness,
-      # so it does not matter whether the image ships a shell or exits immediately.
-      - name: Pre-pull the script node image into kind
+      - name: Provision dispatcher ServiceAccount and RBAC
+        run: kubectl apply -f docs/feature-branch-assets/execution-plane-init.yaml
+
+      # The transport runs node pods with imagePullPolicy: IfNotPresent. Load the
+      # image onto the kind node up front so the pod starts immediately rather
+      # than racing a cold registry pull against the dispatch startup deadline.
+      - name: Load the script node image onto the kind node
+        run: |
+          image="quay.io/ahetheri/syntara-node-script:migration-test"
+          docker pull "$image"
+          kind load docker-image "$image" --name integration-test
+
+      - name: Export cluster coordinates for the test suite
         run: |
           set -euo pipefail
-          image="quay.io/ahetheri/syntara-node-script:migration-test"
-          pulled=false
-          # Retry the whole pod up to 3 times to recover from transient network
-          # errors (e.g. truncated downloads that put the pod into ErrImagePull /
-          # ImagePullBackOff). Each attempt gets a fresh pod so the kubelet resets
-          # its back-off counter and immediately tries the pull again.
-          for attempt in 1 2 3; do
-            kubectl delete pod ep-image-prepull -n execution-plane --ignore-not-found --wait=true 2>/dev/null || true
-            kubectl run ep-image-prepull \
-              --namespace execution-plane \
-              --image="$image" \
-              --image-pull-policy=Always \
-              --restart=Never
-            for _ in $(seq 1 60); do
-              image_id="$(kubectl get pod ep-image-prepull -n execution-plane \
-                -o jsonpath='{.status.containerStatuses[0].imageID}' 2>/dev/null || true)"
-              if [ -n "$image_id" ]; then
-                echo "Image present on node (attempt ${attempt}): $image_id"
-                pulled=true
-                break 2
-              fi
-              reason="$(kubectl get pod ep-image-prepull -n execution-plane \
-                -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)"
-              # ErrImageNeverPull means the image policy permanently forbids pulling — no point retrying.
-              if [ "$reason" = "ErrImageNeverPull" ]; then
-                echo "::error::Image pull policy prevents pulling ${image}"
-                kubectl describe pod ep-image-prepull -n execution-plane || true
-                exit 1
-              fi
-              phase="$(kubectl get pod ep-image-prepull -n execution-plane \
-                -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-              echo "attempt ${attempt}: waiting for image pull (phase=${phase:-unknown} reason=${reason:-none})..."
-              sleep 5
-            done
-            echo "attempt ${attempt} timed out, retrying with a fresh pod..."
-          done
-          kubectl delete pod ep-image-prepull -n execution-plane --ignore-not-found --wait=false
-          if [ "$pulled" != "true" ]; then
-            echo "::error::Script node image was not pulled onto the kind node after 3 attempts"
-            exit 1
-          fi
+          endpoint="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          token="$(kubectl create token syntara-dispatcher -n execution-plane --duration=2h)"
+          echo "::add-mask::${token}"
+          ca_cert_pem="$(kubectl config view --minify --raw \
+            -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)"
+          {
+            echo "EP_IT_K8S_ENDPOINT=${endpoint}"
+            echo "EP_IT_K8S_TOKEN=${token}"
+            echo "EP_IT_K8S_NAMESPACE=execution-plane"
+            printf "EP_IT_K8S_CA_CERT<<EOF\n%s\nEOF\n" "${ca_cert_pem}"
+          } >> "$GITHUB_ENV"
 
       - name: Run Alembic migrations
         run: uv run alembic -c alembic.ini upgrade head
