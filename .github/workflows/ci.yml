@@ -121,25 +121,56 @@ jobs:
             -c "CREATE ROLE execution_plane_runtime LOGIN" \
             -c "CREATE DATABASE execution_plane OWNER postgres"
 
-      # Stand up a throwaway kind cluster. The dispatcher ServiceAccount and RBAC
-      # in execution-plane-init.yaml grant the bearer token the permissions the
-      # vanilla-k8s transport needs (pod list, portforward, job CRUD).
+      # EXPERIMENTAL: run the kind cluster on the podman provider instead of
+      # docker (reviewer preference; local dev already uses kind-on-podman).
+      # kind on rootless podman needs cgroup v2 + systemd user-delegation and
+      # the cgroupfs cgroup manager; GitHub's Ubuntu runner provides cgroup v2,
+      # so configure both before creating the cluster. The postgres service
+      # container above still runs on docker (GitHub manages service containers
+      # with docker); the two runtimes coexist on the runner.
+      - name: Prepare podman for kind (rootless cgroup delegation)
+        run: |
+          set -euo pipefail
+          # Cgroup delegation: let the rootless podman user manage its own subtree.
+          sudo mkdir -p /etc/systemd/system/user@.service.d
+          printf '[Service]\nDelegate=yes\n' \
+            | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
+          sudo systemctl daemon-reload
+          # Use the cgroupfs cgroup manager instead of systemd. On GitHub Actions
+          # runners the runner process lives in a system-slice cgroup, not the
+          # user's systemd session, so the rootless network process
+          # (pasta/slirp4netns) ends up in a cgroup the runner user cannot signal
+          # — causing "kill network process: permission denied" during container
+          # cleanup. With cgroupfs, podman owns its cgroup subtree directly and
+          # kill() succeeds.
+          mkdir -p ~/.config/containers
+          printf '[engine]\ncgroup_manager = "cgroupfs"\n' \
+            > ~/.config/containers/containers.conf
+          podman --version
+          podman info | grep -iE 'cgroup' || true
+
+      # Stand up a throwaway kind cluster on podman. The dispatcher
+      # ServiceAccount and RBAC in execution-plane-init.yaml grant the bearer
+      # token the permissions the vanilla-k8s transport needs (pod list,
+      # portforward, job CRUD).
       - name: Create kind cluster
         uses: helm/kind-action@v1
+        env:
+          KIND_EXPERIMENTAL_PROVIDER: podman
         with:
           cluster_name: integration-test
 
       - name: Provision dispatcher ServiceAccount and RBAC
         run: kubectl apply -f docs/feature-branch-assets/execution-plane-init.yaml
 
-      # The transport runs node pods with imagePullPolicy: IfNotPresent. Load the
-      # image onto the kind node up front so the pod starts immediately rather
-      # than racing a cold registry pull against the dispatch startup deadline.
-      - name: Load the script node image onto the kind node
+      # The transport runs node pods with imagePullPolicy: IfNotPresent. The kind
+      # node is a podman container, so pull the image directly into the node's
+      # containerd k8s.io namespace (what kubelet's IfNotPresent check uses) via
+      # crictl, rather than `docker pull` + `kind load` which assume docker.
+      - name: Pre-pull the script node image into kind
         run: |
-          image="quay.io/ahetheri/syntara-node-script:migration-test"
-          docker pull "$image"
-          kind load docker-image "$image" --name integration-test
+          podman exec integration-test-control-plane \
+            crictl pull quay.io/ahetheri/syntara-node-script:migration-test
 
       - name: Export cluster coordinates for the test suite
         run: |
@@ -173,6 +204,22 @@ jobs:
             integration-test-logs/
           retention-days: 7
           if-no-files-found: ignore
+
+      # Delete the cluster ourselves before helm/kind-action's post-job hook does.
+      # The rootless network helper (pasta/slirp4netns) for the kind node ends up
+      # in a cgroup the runner user cannot signal, so podman's cleanup gets
+      # "kill network process: permission denied" (EPERM). Killing the helper with
+      # sudo first makes podman's own kill() return ESRCH ("already gone"), which
+      # podman treats as success, so the deletion completes and the post-job hook
+      # then finds no cluster and exits cleanly.
+      - name: Pre-delete kind cluster (workaround rootless netns kill permission)
+        if: always()
+        env:
+          KIND_EXPERIMENTAL_PROVIDER: podman
+        run: |
+          sudo pkill -x pasta 2>/dev/null || sudo pkill -x slirp4netns 2>/dev/null || true
+          sleep 1
+          kind delete cluster --name integration-test 2>/dev/null || true
 
   container:
     if: startsWith(github.ref, 'refs/tags/v')
