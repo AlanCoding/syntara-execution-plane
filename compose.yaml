@@ -107,7 +107,7 @@ services:
       EP_AO_JWT_PUBLIC_KEY_PATH: /run/secrets/ao-jwt-public.pem
       EP_AO_JWT_ISSUER: ${EP_AO_JWT_ISSUER:-http://localhost:8000}
       EP_AO_CLIENT_ID: ${EP_AO_CLIENT_ID:-syntara-orchestration}
-      WAIT_FOR_SQL: "SELECT 1 FROM execution_plane.alembic_version"
+      WAIT_FOR_ALEMBIC_HEAD: "1"
     volumes:
       - ./tools/wait_for_ep_database.py:/scripts/wait_for_ep_database.py:ro,z
       - ${EP_CREDENTIAL_ENCRYPTION_KEY_FILE:-.secrets/encryption-key}:/run/secrets/ep/credential-encryption-key:ro,z
@@ -140,7 +140,7 @@ services:
       EP_NODE_GRACE_SECONDS: ${EP_NODE_GRACE_SECONDS:-30}
       EP_WORKLOAD_ALLOWED_EGRESS_CIDRS: ${EP_WORKLOAD_ALLOWED_EGRESS_CIDRS:-[]}
       EP_WORKLOAD_FORBIDDEN_EGRESS_CIDRS: ${EP_WORKLOAD_FORBIDDEN_EGRESS_CIDRS:-[]}
-      WAIT_FOR_SQL: "SELECT 1 FROM execution_plane.alembic_version"
+      WAIT_FOR_ALEMBIC_HEAD: "1"
     volumes:
       - ./tools/wait_for_ep_database.py:/scripts/wait_for_ep_database.py:ro,z
       - ${EP_CREDENTIAL_ENCRYPTION_KEY_FILE:-.secrets/encryption-key}:/run/secrets/ep/credential-encryption-key:ro,z

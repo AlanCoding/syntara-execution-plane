@@ -11,10 +11,13 @@ import os
 import time
 
 import asyncpg
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.engine import make_url
 
 _DEFAULT_TIMEOUT_SECONDS = 180.0
 _RETRY_PAUSE_SECONDS = 2.0
+_ALEMBIC_VERSION_SQL = "SELECT version_num FROM execution_plane.alembic_version"
 
 
 def _dsn() -> str:
@@ -25,7 +28,22 @@ def _dsn() -> str:
     return make_url(url).set(drivername="postgresql").render_as_string(hide_password=False)
 
 
-async def _ready(dsn: str, sql: str | None) -> None:
+def _expected_heads() -> frozenset[str]:
+    config_path = os.environ.get("ALEMBIC_CONFIG", "alembic.ini")
+    heads = ScriptDirectory.from_config(Config(config_path)).get_heads()
+    if not heads:
+        msg = f"no alembic heads in {config_path}"
+        raise RuntimeError(msg)
+    return frozenset(heads)
+
+
+def _alembic_heads_from_env() -> frozenset[str] | None:
+    if not os.environ.get("WAIT_FOR_ALEMBIC_HEAD"):
+        return None
+    return _expected_heads()
+
+
+async def _ready(dsn: str, sql: str | None, heads: frozenset[str] | None) -> None:
     conn = await asyncpg.connect(dsn)
     try:
         if sql:
@@ -33,20 +51,27 @@ async def _ready(dsn: str, sql: str | None) -> None:
             if result is None:
                 msg = f"query returned no row: {sql}"
                 raise RuntimeError(msg)
+        if heads:
+            applied = {row["version_num"] for row in await conn.fetch(_ALEMBIC_VERSION_SQL)}
+            missing = heads - applied
+            if missing:
+                msg = f"alembic heads not applied: missing={sorted(missing)} applied={sorted(applied)}"
+                raise RuntimeError(msg)
     finally:
         await conn.close()
 
 
 async def wait_for_database() -> None:
-    """Retry until the DSN connects, and until WAIT_FOR_SQL succeeds when set."""
+    """Retry until the DSN connects and optional SQL / Alembic head checks pass."""
     dsn = _dsn()
     sql = os.environ.get("WAIT_FOR_SQL") or None
+    heads = _alembic_heads_from_env()
     timeout = float(os.environ.get("WAIT_FOR_DATABASE_SECONDS", _DEFAULT_TIMEOUT_SECONDS))
     deadline = time.monotonic() + timeout
     last_error = "not attempted"
     while time.monotonic() < deadline:
         try:
-            await _ready(dsn, sql)
+            await _ready(dsn, sql, heads)
             return
         except Exception as exc:  # noqa: BLE001 — bootstrap races any connect failure
             last_error = str(exc)
