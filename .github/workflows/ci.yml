@@ -85,35 +85,44 @@ jobs:
         run: |
           set -euo pipefail
           image="quay.io/ahetheri/syntara-node-script:migration-test"
-          kubectl run ep-image-prepull \
-            --namespace execution-plane \
-            --image="$image" \
-            --image-pull-policy=Always \
-            --restart=Never
           pulled=false
-          for _ in $(seq 1 90); do
-            image_id="$(kubectl get pod ep-image-prepull -n execution-plane \
-              -o jsonpath='{.status.containerStatuses[0].imageID}' 2>/dev/null || true)"
-            if [ -n "$image_id" ]; then
-              echo "Image present on node: $image_id"
-              pulled=true
-              break
-            fi
-            reason="$(kubectl get pod ep-image-prepull -n execution-plane \
-              -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)"
-            if [ "$reason" = "ImagePullBackOff" ]; then
-              echo "::error::kubelet could not pull ${image} onto the kind node"
-              kubectl describe pod ep-image-prepull -n execution-plane || true
-              break
-            fi
-            phase="$(kubectl get pod ep-image-prepull -n execution-plane \
-              -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-            echo "waiting for node image pull (phase=${phase:-unknown} reason=${reason:-none})..."
-            sleep 5
+          # Retry the whole pod up to 3 times to recover from transient network
+          # errors (e.g. truncated downloads that put the pod into ErrImagePull /
+          # ImagePullBackOff). Each attempt gets a fresh pod so the kubelet resets
+          # its back-off counter and immediately tries the pull again.
+          for attempt in 1 2 3; do
+            kubectl delete pod ep-image-prepull -n execution-plane --ignore-not-found --wait=true 2>/dev/null || true
+            kubectl run ep-image-prepull \
+              --namespace execution-plane \
+              --image="$image" \
+              --image-pull-policy=Always \
+              --restart=Never
+            for _ in $(seq 1 60); do
+              image_id="$(kubectl get pod ep-image-prepull -n execution-plane \
+                -o jsonpath='{.status.containerStatuses[0].imageID}' 2>/dev/null || true)"
+              if [ -n "$image_id" ]; then
+                echo "Image present on node (attempt ${attempt}): $image_id"
+                pulled=true
+                break 2
+              fi
+              reason="$(kubectl get pod ep-image-prepull -n execution-plane \
+                -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)"
+              # ErrImageNeverPull means the image policy permanently forbids pulling — no point retrying.
+              if [ "$reason" = "ErrImageNeverPull" ]; then
+                echo "::error::Image pull policy prevents pulling ${image}"
+                kubectl describe pod ep-image-prepull -n execution-plane || true
+                exit 1
+              fi
+              phase="$(kubectl get pod ep-image-prepull -n execution-plane \
+                -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+              echo "attempt ${attempt}: waiting for image pull (phase=${phase:-unknown} reason=${reason:-none})..."
+              sleep 5
+            done
+            echo "attempt ${attempt} timed out, retrying with a fresh pod..."
           done
           kubectl delete pod ep-image-prepull -n execution-plane --ignore-not-found --wait=false
           if [ "$pulled" != "true" ]; then
-            echo "::error::Script node image was not pulled onto the kind node in time"
+            echo "::error::Script node image was not pulled onto the kind node after 3 attempts"
             exit 1
           fi
 
