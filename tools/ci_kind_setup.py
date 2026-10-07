@@ -33,7 +33,7 @@ RBAC_MANIFEST = PROJECT_ROOT / "docs" / "feature-branch-assets" / "execution-pla
 DEFAULT_CLUSTER_NAME = "integration-test"
 DEFAULT_NAMESPACE = "execution-plane"
 DEFAULT_SERVICE_ACCOUNT = "syntara-dispatcher"
-DEFAULT_TOKEN_TTL = "2h"  # noqa: S105 — this is a duration string, not a password
+DEFAULT_TOKEN_TTL = "2h"  # noqa: S105  # duration string, not a credential
 CONTROL_PLANE_PORT = 6443
 
 
