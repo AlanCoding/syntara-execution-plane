@@ -113,7 +113,7 @@ def invoke(  # noqa: C901, PLR0912, PLR0915
         # exc.code() is normally a grpc.StatusCode with .name; guard against
         # edge-case RpcError subclasses that lack the Call mixin.
         try:
-            code_name = exc.code().name  # type: ignore[union-attr]
+            code_name = exc.code().name
         except AttributeError:
             code_name = "UNKNOWN"
         message = f"Node gRPC call failed ({code_name})"
