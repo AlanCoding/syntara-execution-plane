@@ -143,6 +143,8 @@ jobs:
 
       - name: Run Alembic migrations
         run: uv run alembic -c alembic.ini upgrade head
+        env:
+          DATABASE_URL: ${{ env.EP_DATABASE_URL }}
 
       - name: Run PostgreSQL persistence tests
         run: uv run pytest tests/integration/test_postgres_persistence_types.py -v
