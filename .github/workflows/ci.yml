@@ -26,7 +26,61 @@ jobs:
       - run: uv run mypy --strict src
       - run: uv run pytest
 
-  test-integration:
+  # Runs the PostgreSQL persistence tests against a real database.
+  # No Kubernetes cluster required.
+  test-integration-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      EP_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/execution_plane
+      EP_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/execution_plane
+      EP_CREDENTIAL_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked --all-groups
+
+      - name: Bootstrap execution_plane database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres postgres \
+            -c "CREATE ROLE execution_plane_runtime LOGIN" \
+            -c "CREATE DATABASE execution_plane OWNER postgres"
+
+      - name: Run Alembic migrations
+        run: uv run alembic -c alembic.ini upgrade head
+        env:
+          DATABASE_URL: ${{ env.EP_DATABASE_URL }}
+
+      - name: Run PostgreSQL persistence tests
+        run: uv run pytest tests/integration/test_postgres_persistence_types.py -v
+
+  # Runs the end-to-end dispatch test, which requires both PostgreSQL and a
+  # live kind (Kubernetes-in-Docker) cluster. Kept as a separate job so the
+  # postgres-only check above stays fast and clearly labelled.
+  test-integration-postgres-kind:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -151,9 +205,6 @@ jobs:
         run: uv run alembic -c alembic.ini upgrade head
         env:
           DATABASE_URL: ${{ env.EP_DATABASE_URL }}
-
-      - name: Run PostgreSQL persistence tests
-        run: uv run pytest tests/integration/test_postgres_persistence_types.py -v
 
       - name: Run cluster dispatch integration tests
         run: uv run pytest tests/integration/test_dispatch.py -m integration -v --timeout=600
