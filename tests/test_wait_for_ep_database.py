@@ -50,7 +50,19 @@ async def test_ready_rejects_missing_alembic_heads(wait_mod: ModuleType) -> None
     conn.fetch = AsyncMock(return_value=[{"version_num": "oldhead"}])
     with (
         patch.object(wait_mod.asyncpg, "connect", AsyncMock(return_value=conn)),
-        pytest.raises(RuntimeError, match="alembic heads not applied"),
+        pytest.raises(RuntimeError, match="alembic heads mismatch"),
+    ):
+        await wait_mod._ready("postgresql://unused", sql=None, heads=frozenset({"newhead"}))
+    conn.fetch.assert_awaited_once_with(wait_mod._ALEMBIC_VERSION_SQL)
+    conn.close.assert_awaited_once()
+
+
+async def test_ready_rejects_unexpected_alembic_heads(wait_mod: ModuleType) -> None:
+    conn = AsyncMock()
+    conn.fetch = AsyncMock(return_value=[{"version_num": "newhead"}, {"version_num": "otherhead"}])
+    with (
+        patch.object(wait_mod.asyncpg, "connect", AsyncMock(return_value=conn)),
+        pytest.raises(RuntimeError, match="alembic heads mismatch"),
     ):
         await wait_mod._ready("postgresql://unused", sql=None, heads=frozenset({"newhead"}))
     conn.fetch.assert_awaited_once_with(wait_mod._ALEMBIC_VERSION_SQL)

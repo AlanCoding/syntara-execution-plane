@@ -53,9 +53,8 @@ async def _ready(dsn: str, sql: str | None, heads: frozenset[str] | None) -> Non
                 raise RuntimeError(msg)
         if heads:
             applied = {row["version_num"] for row in await conn.fetch(_ALEMBIC_VERSION_SQL)}
-            missing = heads - applied
-            if missing:
-                msg = f"alembic heads not applied: missing={sorted(missing)} applied={sorted(applied)}"
+            if applied != heads:
+                msg = f"alembic heads mismatch: expected={sorted(heads)} applied={sorted(applied)}"
                 raise RuntimeError(msg)
     finally:
         await conn.close()
