@@ -18,9 +18,7 @@ format:
 typecheck:
 	uv run mypy --strict src
 
-generate:
-	$(MAKE) api-spec
-	$(MAKE) generate-schemas
+generate: api-spec generate-schemas
 
 api-spec:
 	uv run python tools/export_openapi.py
