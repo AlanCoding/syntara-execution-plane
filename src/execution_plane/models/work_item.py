@@ -34,10 +34,18 @@ class WorkItemBase(SQLModel):
 
     id: uuid.UUID
     project_id: uuid.UUID
+
+    # Stable caller key. Transport and activity retries must reuse this value.
     request_id: str
+
+    # Opaque caller correlation handle, with no Temporal-specific meaning.
     work_correlation_id: uuid.UUID
+
     status: WorkItemStatus
+
+    # Terminal result is owned and retained by EP independently of AO availability.
     result: dict[str, Any] | None
+
     created_at: datetime
     claimed_at: datetime | None
     completed_at: datetime | None
@@ -59,6 +67,9 @@ class WorkItem(WorkItemBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
 
+    # Authenticated client and project scope are stored on every record. The API
+    # derives client_id from the service token and validates project_id against
+    # its signed authorization context.
     client_id: str = Field(sa_column=Column(String(128), nullable=False))
     request_id: str = Field(sa_column=Column(String(200), nullable=False))
     request_hash: str = Field(sa_column=Column(String(64), nullable=False))
@@ -75,8 +86,10 @@ class WorkItem(WorkItemBase, table=True):
         ),
     )
 
+    # Set when a worker claims this item.
     execution_target_id: uuid.UUID | None = Field(default=None, foreign_key=f"{EP_SCHEMA}.execution_targets.id")
 
+    # Workload parameters serialized at submission time.
     payload: dict[str, Any] = Field(
         default={},
         sa_column=Column(EncryptedWorkItemPayload(), nullable=False, server_default="{}"),

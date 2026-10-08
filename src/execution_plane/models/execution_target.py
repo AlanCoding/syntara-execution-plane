@@ -49,12 +49,12 @@ class ExecutionTargetBase(SQLModel):
     endpoint: str
     placement: ExecutionTargetPlacement
     status: TargetStatus
-    enabled: bool
-    is_default: bool
-    status_message: str | None
-    labels: dict[str, str]
+    enabled: bool = True
+    is_default: bool = False
+    status_message: str | None = None
+    labels: dict[str, str] = Field(default_factory=dict)
     created_at: datetime
-    last_ran_at: datetime | None
+    last_ran_at: datetime | None = None
 
 
 class ExecutionTarget(ExecutionTargetBase, table=True):
@@ -89,7 +89,6 @@ class ExecutionTarget(ExecutionTargetBase, table=True):
         sa_column_kwargs={"nullable": False},
         discriminator="type",
     )
-
     status: TargetStatus = Field(
         default=TargetStatus.REGISTERING,
         sa_column=Column(
@@ -99,9 +98,6 @@ class ExecutionTarget(ExecutionTargetBase, table=True):
             nullable=False,
         ),
     )
-    enabled: bool = True
-    is_default: bool = Field(default=False, nullable=False)
-    status_message: str | None = Field(default=None, nullable=True)
     api_key: str = Field(sa_column=Column(EncryptedCredential(), nullable=False), repr=False, exclude=True)
     labels: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
     created_by: uuid.UUID = Field(nullable=False)

@@ -450,9 +450,11 @@ components:
         enabled:
           type: boolean
           title: Enabled
+          default: true
         is_default:
           type: boolean
           title: Is Default
+          default: false
         status_message:
           anyOf:
           - type: string
@@ -482,12 +484,7 @@ components:
       - endpoint
       - placement
       - status
-      - enabled
-      - is_default
-      - status_message
-      - labels
       - created_at
-      - last_ran_at
       title: ExecutionTargetRead
       description: Safe execution-target representation without management credentials.
     HTTPValidationError:
