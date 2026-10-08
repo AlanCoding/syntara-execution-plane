@@ -59,16 +59,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked --all-groups
-      - run: |
-          uvx --from datamodel-code-generator datamodel-codegen \
-            --input openapi.yaml \
-            --input-file-type openapi \
-            --output src/execution_plane/api/generated.py \
-            --output-model-type pydantic_v2.BaseModel \
-            --use-annotated \
-            --use-standard-collections \
-            --target-python-version 3.12
-          sed -i '/^#.*timestamp:/d' src/execution_plane/api/generated.py
+      - run: make generate-schemas
       - name: Fail if generated.py has uncommitted changes
         run: |
           if ! git diff --exit-code -- src/execution_plane/api/generated.py; then

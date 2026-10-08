@@ -53,8 +53,12 @@ class ClusterBindingUpsert(BaseModel):
         ),
     ]
     credential: Annotated[str | None, Field(title='Credential')] = ''
-    ca_certificate: Annotated[CaCertificate | None, Field(title='Ca Certificate')] = None
-    insecure_skip_tls_verify: Annotated[bool | None, Field(title='Insecure Skip Tls Verify')] = False
+    ca_certificate: Annotated[CaCertificate | None, Field(title='Ca Certificate')] = (
+        None
+    )
+    insecure_skip_tls_verify: Annotated[
+        bool | None, Field(title='Insecure Skip Tls Verify')
+    ] = False
     project_ids: Annotated[list[UUID] | None, Field(title='Project Ids')] = None
     labels: Annotated[dict[str, str] | None, Field(title='Labels')] = None
     enabled: Annotated[bool | None, Field(title='Enabled')] = True
@@ -155,5 +159,7 @@ class WorkItemRead(BaseModel):
     completed_at: Annotated[AwareDatetime | None, Field(title='Completed At')]
     resource_cleanup_status: Annotated[str, Field(title='Resource Cleanup Status')]
     resource_cleanup_error: Annotated[str | None, Field(title='Resource Cleanup Error')]
-    completion_event_id: Annotated[UUID | None, Field(title='Completion Event Id')] = None
+    completion_event_id: Annotated[UUID | None, Field(title='Completion Event Id')] = (
+        None
+    )
     state_revision: Annotated[int | None, Field(title='State Revision')] = None

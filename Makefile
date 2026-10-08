@@ -33,6 +33,7 @@ generate-schemas: api-spec
 		--use-standard-collections \
 		--target-python-version 3.12
 	sed -i '/^#.*timestamp:/d' src/execution_plane/api/generated.py
+	sed -i 's|^#   filename:  openapi.yaml$$|#   filename:  openapi.yaml\n#\n# DO NOT EDIT — regenerate with: make generate|' src/execution_plane/api/generated.py
 
 migrate:
 	uv run alembic -c alembic.ini upgrade head
