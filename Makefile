@@ -18,12 +18,14 @@ format:
 typecheck:
 	uv run mypy --strict src
 
-generate: generate-schemas
+generate:
+	$(MAKE) api-spec
+	$(MAKE) generate-schemas
 
 api-spec:
 	uv run python tools/export_openapi.py
 
-generate-schemas: api-spec
+generate-schemas:
 	uvx --from datamodel-code-generator datamodel-codegen \
 		--input openapi.yaml \
 		--input-file-type openapi \
