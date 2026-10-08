@@ -4,7 +4,7 @@ Instantiates the FastAPI application from api/main.py and writes the
 OpenAPI spec to a file. No database or external services are required.
 
 Usage:
-    make openapi
+    make generate
     uv run python tools/export_openapi.py [--output PATH] [--format {json,yaml}]
 
 The committed openapi.yaml is kept in sync by the `openapi-drift` CI job.
