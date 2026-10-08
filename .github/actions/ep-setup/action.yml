@@ -1,0 +1,32 @@
+name: EP CI setup
+description: >-
+  Install Python and uv, sync dependencies, bootstrap the execution_plane
+  database, and run Alembic migrations. Requires the repository to be checked
+  out first, a PostgreSQL service reachable at localhost:5432, and
+  EP_DATABASE_URL set in the job environment.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      shell: bash
+      run: uv sync --locked --all-groups
+
+    - name: Bootstrap execution_plane database
+      shell: bash
+      run: |
+        PGPASSWORD=postgres psql -h localhost -U postgres postgres \
+          -c "CREATE ROLE execution_plane_runtime LOGIN" \
+          -c "CREATE DATABASE execution_plane OWNER postgres"
+
+    - name: Run Alembic migrations
+      shell: bash
+      run: DATABASE_URL="$EP_DATABASE_URL" uv run alembic -c alembic.ini upgrade head

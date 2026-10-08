@@ -553,15 +553,17 @@ def run_job(  # noqa: C901, PLR0912, PLR0915 - one owned cold-start allocation
                     submitted=submitted or (job_may_exist and not job_owned),
                 ) from None
             except Exception as exc:  # noqa: BLE001 - never expose raw API credentials or responses
-                # Catch-all for non-API failures (DNS, TLS, socket). Log the
-                # exception type for admin triage — not str(exc), which could carry
-                # request detail — then raise a sanitized error.
+                # Catch-all for non-API failures (DNS, TLS, socket). Log both the
+                # exception type and message for admin triage. str(exc) is safe here
+                # because this branch only fires for non-ApiException errors (those are
+                # caught above) whose messages do not carry raw Kubernetes responses.
                 logger.warning(
                     "Node transport failed",
                     work_item_id=identity,
                     pod=pod_name or name,
                     namespace=namespace,
                     error_type=type(exc).__name__,
+                    error=str(exc),
                 )
                 message = "Node transport failed"
                 raise TransportError(

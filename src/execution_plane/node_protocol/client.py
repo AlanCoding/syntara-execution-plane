@@ -110,9 +110,15 @@ def invoke(  # noqa: C901, PLR0912, PLR0915
             message = "Node invocation stopped after cancellation"
             raise NodeRpcError(message, cancelled=True) from None
         # Never include remote diagnostic text: it may contain credentials.
-        message = f"Node gRPC call failed ({exc.code().name})"
+        # exc.code() is normally a grpc.StatusCode with .name; guard against
+        # edge-case RpcError subclasses that lack the Call mixin.
+        try:
+            code_name = exc.code().name
+        except AttributeError:
+            code_name = "UNKNOWN"
+        message = f"Node gRPC call failed ({code_name})"
         raise NodeRpcError(message) from None
-    except (ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError, AttributeError):
         message = "Invalid node gRPC result"
         raise NodeRpcError(message) from None
     finally:
