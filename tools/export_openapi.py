@@ -10,8 +10,6 @@ The committed openapi.yaml is kept in sync by the `openapi-drift` CI job.
 Run this script locally and commit the result whenever the API changes.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys
