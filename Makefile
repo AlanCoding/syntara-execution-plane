@@ -1,4 +1,4 @@
-.PHONY: install test test-integration lint format typecheck openapi migrate image secrets certs setup compose-up compose-down
+.PHONY: install test test-integration lint format typecheck openapi schemas migrate image secrets certs setup compose-up compose-down
 
 install:
 	uv sync --locked --all-groups
@@ -20,6 +20,17 @@ typecheck:
 
 openapi:
 	uv run python tools/export_openapi.py
+
+schemas: openapi
+	uvx --from datamodel-code-generator datamodel-codegen \
+		--input openapi.yaml \
+		--input-file-type openapi \
+		--output src/execution_plane/api/generated.py \
+		--output-model-type pydantic_v2.BaseModel \
+		--use-annotated \
+		--use-standard-collections \
+		--target-python-version 3.12
+	sed -i '/^#.*timestamp:/d' src/execution_plane/api/generated.py
 
 migrate:
 	uv run alembic -c alembic.ini upgrade head

@@ -64,7 +64,7 @@ markers = ["integration: marks tests that require a real PostgreSQL database and
 [tool.ruff]
 target-version = "py312"
 line-length = 120
-extend-exclude = ["src/execution_plane/node_protocol/node_pb2*"]
+extend-exclude = ["src/execution_plane/node_protocol/node_pb2*", "src/execution_plane/api/generated.py"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -82,6 +82,10 @@ ignore = ["D203", "D213", "COM812", "PLR0913", "TRY300", "FIX002"]
 
 [[tool.mypy.overrides]]
 module = ["execution_plane.node_protocol.node_pb2", "execution_plane.node_protocol.node_pb2_grpc"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["execution_plane.api.generated"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
