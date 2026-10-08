@@ -6,11 +6,21 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
-from execution_plane.models.execution_target import BackendType, TargetStatus
-from execution_plane.models.execution_target_placement import ExecutionTargetPlacement
-from execution_plane.models.work_item import WorkItemStatus
+from execution_plane.models.execution_target import BackendType, ExecutionTargetBase, TargetStatus
+from execution_plane.models.work_item import WorkItemBase, WorkItemStatus
+
+
+class WorkItemRead(WorkItemBase):
+    """Safe work-item representation; excludes credentials and persistence internals."""
+
+    completion_event_id: uuid.UUID | None = None
+    state_revision: int | None = None
+
+
+class ExecutionTargetRead(ExecutionTargetBase):
+    """Safe execution-target representation without management credentials."""
 
 
 class WorkItemSubmit(BaseModel):
@@ -106,46 +116,6 @@ class ClusterBindingRead(BaseModel):
     updated_at: datetime
 
 
-class WorkItemRead(BaseModel):
-    """Safe work-item representation; excludes credentials and persistence internals."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    project_id: uuid.UUID
-    request_id: str
-    work_correlation_id: uuid.UUID
-    status: WorkItemStatus
-    result: dict[str, Any] | None
-    created_at: datetime
-    claimed_at: datetime | None
-    completed_at: datetime | None
-    resource_cleanup_status: str
-    resource_cleanup_error: str | None
-    completion_event_id: uuid.UUID | None = None
-    state_revision: int | None = None
-
-
-class ExecutionTargetRead(BaseModel):
-    """Safe execution-target representation without management credentials."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    cluster_id: uuid.UUID
-    name: str
-    backend_type: BackendType
-    endpoint: str
-    placement: ExecutionTargetPlacement
-    status: TargetStatus
-    enabled: bool
-    is_default: bool
-    status_message: str | None
-    labels: dict[str, str]
-    created_at: datetime
-    last_ran_at: datetime | None
-
-
 class CompletionEventRequest(BaseModel):
     """Wire form delivered to the client's configured completion callback."""
 
@@ -167,3 +137,19 @@ class CapabilitiesResponse(BaseModel):
     api_version: str = "v1"
     workloads: list[str] = Field(default_factory=lambda: ["script"])
     result_events: bool = True
+
+
+# Suppress unused-import warnings for symbols re-exported to the API layer.
+__all__ = [
+    "BackendType",
+    "CapabilitiesResponse",
+    "ClusterBindingRead",
+    "ClusterBindingUpsert",
+    "CompletionEventRequest",
+    "ExecutionTargetRead",
+    "TargetStatus",
+    "WorkItemCancelRequest",
+    "WorkItemRead",
+    "WorkItemStatus",
+    "WorkItemSubmit",
+]

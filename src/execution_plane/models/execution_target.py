@@ -39,7 +39,25 @@ class TargetStatus(StrEnum):
     FAILED = "failed"
 
 
-class ExecutionTarget(SQLModel, table=True):
+class ExecutionTargetBase(SQLModel):
+    """Public fields shared between the ORM table and the API response schema."""
+
+    id: uuid.UUID
+    cluster_id: uuid.UUID
+    name: str
+    backend_type: BackendType
+    endpoint: str
+    placement: ExecutionTargetPlacement
+    status: TargetStatus
+    enabled: bool
+    is_default: bool
+    status_message: str | None
+    labels: dict[str, str]
+    created_at: datetime
+    last_ran_at: datetime | None
+
+
+class ExecutionTarget(ExecutionTargetBase, table=True):
     """A registered compute environment where worker pods run."""
 
     __tablename__ = "execution_targets"
@@ -57,7 +75,6 @@ class ExecutionTarget(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     cluster_id: uuid.UUID = Field(foreign_key=f"{EP_SCHEMA}.clusters.id", nullable=False)
-    name: str
     # The migration stores enum values in VARCHAR columns, not native PG enums.
     backend_type: BackendType = Field(
         sa_column=Column(
@@ -67,7 +84,6 @@ class ExecutionTarget(SQLModel, table=True):
             nullable=False,
         ),
     )
-    endpoint: str
     placement: ExecutionTargetPlacementTypes = Field(
         sa_type=DiscriminatedJSONB(ExecutionTargetPlacement),  # type: ignore[arg-type, call-overload]
         sa_column_kwargs={"nullable": False},
@@ -85,8 +101,8 @@ class ExecutionTarget(SQLModel, table=True):
     )
     enabled: bool = True
     is_default: bool = Field(default=False, nullable=False)
-    api_key: str = Field(sa_column=Column(EncryptedCredential(), nullable=False), repr=False, exclude=True)
     status_message: str | None = Field(default=None, nullable=True)
+    api_key: str = Field(sa_column=Column(EncryptedCredential(), nullable=False), repr=False, exclude=True)
     labels: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
     created_by: uuid.UUID = Field(nullable=False)
     created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))

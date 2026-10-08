@@ -29,7 +29,23 @@ class WorkItemStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class WorkItem(SQLModel, table=True):
+class WorkItemBase(SQLModel):
+    """Public fields shared between the ORM table and the API response schema."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    request_id: str
+    work_correlation_id: uuid.UUID
+    status: WorkItemStatus
+    result: dict[str, Any] | None
+    created_at: datetime
+    claimed_at: datetime | None
+    completed_at: datetime | None
+    resource_cleanup_status: str
+    resource_cleanup_error: str | None
+
+
+class WorkItem(WorkItemBase, table=True):
     """A unit of work accepted and managed by the Execution Plane service."""
 
     __tablename__ = "work_items"
@@ -43,18 +59,9 @@ class WorkItem(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
 
-    # Authenticated client and project scope are stored on every record. The API
-    # derives client_id from the service token and validates project_id against
-    # its signed authorization context.
     client_id: str = Field(sa_column=Column(String(128), nullable=False))
-    project_id: uuid.UUID
-
-    # Stable caller key. Transport and activity retries must reuse this value.
     request_id: str = Field(sa_column=Column(String(200), nullable=False))
     request_hash: str = Field(sa_column=Column(String(64), nullable=False))
-
-    # Opaque caller correlation handle, with no Temporal-specific meaning.
-    work_correlation_id: uuid.UUID
 
     status: WorkItemStatus = Field(
         default=WorkItemStatus.PENDING,
@@ -68,16 +75,13 @@ class WorkItem(SQLModel, table=True):
         ),
     )
 
-    # Set when a worker claims this item.
     execution_target_id: uuid.UUID | None = Field(default=None, foreign_key=f"{EP_SCHEMA}.execution_targets.id")
 
-    # Workload parameters serialized at submission time.
     payload: dict[str, Any] = Field(
         default={},
         sa_column=Column(EncryptedWorkItemPayload(), nullable=False, server_default="{}"),
     )
 
-    # Terminal result is owned and retained by EP independently of AO availability.
     result: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
 
     created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
