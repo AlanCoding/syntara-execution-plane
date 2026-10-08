@@ -1,4 +1,4 @@
-.PHONY: install test test-integration lint format typecheck generate openapi schemas migrate image secrets certs setup compose-up compose-down
+.PHONY: install test test-integration lint format typecheck generate api-spec generate-schemas migrate image secrets certs setup compose-up compose-down
 
 install:
 	uv sync --locked --all-groups
@@ -18,12 +18,12 @@ format:
 typecheck:
 	uv run mypy --strict src
 
-generate: schemas
+generate: generate-schemas
 
-openapi:
+api-spec:
 	uv run python tools/export_openapi.py
 
-schemas: openapi
+generate-schemas: api-spec
 	uvx --from datamodel-code-generator datamodel-codegen \
 		--input openapi.yaml \
 		--input-file-type openapi \
