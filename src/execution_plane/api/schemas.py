@@ -1,6 +1,6 @@
 """Stable public request and response schemas for the EP API.
 
-Generated models live in generated.py — run `make schemas` to update them.
+Generated models live in generated.py — run `make generate` to update them.
 This module re-exports everything from there and adds the validators and
 config that cannot be expressed in OpenAPI.
 """
