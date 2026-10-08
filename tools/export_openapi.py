@@ -17,6 +17,10 @@ import json
 import sys
 from pathlib import Path
 
+import yaml
+
+from execution_plane.api.main import create_app
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -35,8 +39,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    from execution_plane.api.main import create_app  # noqa: PLC0415
-
     app = create_app()
     spec = app.openapi()
 
@@ -46,8 +48,6 @@ def main() -> None:
     if args.format == "json":
         output.write_text(json.dumps(spec, indent=2) + "\n")
     else:
-        import yaml  # noqa: PLC0415
-
         output.write_text(yaml.dump(spec, default_flow_style=False, allow_unicode=True, sort_keys=False))
 
     print(f"Written to {output}", file=sys.stderr)
