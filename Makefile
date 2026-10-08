@@ -1,4 +1,4 @@
-.PHONY: install test test-integration lint format typecheck migrate image secrets certs setup compose-up compose-down
+.PHONY: install test test-integration lint format typecheck openapi migrate image secrets certs setup compose-up compose-down
 
 install:
 	uv sync --locked --all-groups
@@ -17,6 +17,9 @@ format:
 
 typecheck:
 	uv run mypy --strict src
+
+openapi:
+	uv run python tools/export_openapi.py
 
 migrate:
 	uv run alembic -c alembic.ini upgrade head
