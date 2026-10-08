@@ -24,6 +24,15 @@ jobs:
       - run: uv run ruff format --check src tests
       - run: uv run mypy --strict src
       - run: uv run pytest tests/unit
+      - name: Ensure all tests are inside a recognised subfolder
+        run: |
+          orphans=$(find tests -maxdepth 1 -name "*.py" ! -name "__init__.py")
+          if [ -n "$orphans" ]; then
+            echo "Tests found directly under tests/ will not run in CI:"
+            echo "$orphans"
+            echo "Place unit tests in tests/unit/ and integration tests in tests/integration/postgres/ or tests/integration/kind/"
+            exit 1
+          fi
 
   # Validate the container image builds on every change. Publishing happens
   # separately on version tags (see .github/workflows/release.yml); both share
