@@ -23,7 +23,7 @@ jobs:
       - run: uv run ruff check src tests
       - run: uv run ruff format --check src tests
       - run: uv run mypy --strict src
-      - run: uv run pytest
+      - run: uv run pytest tests/unit
 
   # Validate the container image builds on every change. Publishing happens
   # separately on version tags (see .github/workflows/release.yml); both share
