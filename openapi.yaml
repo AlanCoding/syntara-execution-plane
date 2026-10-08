@@ -287,7 +287,6 @@ components:
       - vanilla_k8s
       - openshell
       title: BackendType
-      description: Supported execution target backends.
     CapabilitiesResponse:
       properties:
         api_version:
@@ -354,7 +353,6 @@ components:
       - enabled
       - updated_at
       title: ClusterBindingRead
-      description: Safe observed state for an AO-owned source integration.
     ClusterBindingUpsert:
       properties:
         revision:
@@ -388,7 +386,9 @@ components:
           - type: 'null'
           title: Ca Certificate
         insecure_skip_tls_verify:
-          type: boolean
+          anyOf:
+          - type: boolean
+          - type: 'null'
           title: Insecure Skip Tls Verify
           default: false
         project_ids:
@@ -400,12 +400,16 @@ components:
           - type: 'null'
           title: Project Ids
         labels:
-          additionalProperties:
-            type: string
-          type: object
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
           title: Labels
         enabled:
-          type: boolean
+          anyOf:
+          - type: boolean
+          - type: 'null'
           title: Enabled
           default: true
       type: object
@@ -514,20 +518,23 @@ components:
           title: Namespace
           description: Kubernetes namespace reserved for execution workloads
         node_selectors:
-          items:
-            type: string
-          type: array
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
           title: Node Selectors
         tolerations:
-          items:
-            type: string
-          type: array
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
           title: Tolerations
       type: object
       required:
       - namespace
       title: KubernetesPlacement
-      description: Metadata required to place workers on Kubernetes.
     RHELPlacement:
       properties:
         type:
@@ -537,7 +544,6 @@ components:
           default: rhel
       type: object
       title: RHELPlacement
-      description: Placeholder for RHEL-specific execution-target metadata.
     TargetStatus:
       type: string
       enum:
@@ -549,7 +555,6 @@ components:
       - draining
       - failed
       title: TargetStatus
-      description: Lifecycle states of an execution target.
     ValidationError:
       properties:
         loc:
@@ -586,7 +591,6 @@ components:
       required:
       - work_correlation_id
       title: WorkItemCancelRequest
-      description: Correlation metadata for cancellation that races initial submission.
     WorkItemRead:
       properties:
         id:
@@ -675,7 +679,6 @@ components:
       - failed
       - cancelled
       title: WorkItemStatus
-      description: Lifecycle states of a dispatched work item.
     WorkItemSubmit:
       properties:
         request_id:

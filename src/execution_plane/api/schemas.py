@@ -1,8 +1,8 @@
 """Stable public request and response schemas for the EP API.
 
 Generated models live in generated.py — run `make schemas` to update them.
-This module re-exports everything from there and adds the three validators
-that cannot be expressed in OpenAPI.
+This module re-exports everything from there and adds the validators and
+config that cannot be expressed in OpenAPI.
 """
 
 import json
@@ -11,25 +11,32 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from execution_plane.api.generated import (
     BackendType,
     ClusterBindingRead,
-    ExecutionTargetRead,
     KubernetesPlacement,
     RHELPlacement,
     TargetStatus,
     WorkItemCancelRequest,
-    WorkItemRead,
-    WorkItemStatus,
 )
 from execution_plane.api.generated import (
     ClusterBindingUpsert as _ClusterBindingUpsert,
 )
 from execution_plane.api.generated import (
+    ExecutionTargetRead as _ExecutionTargetRead,
+)
+from execution_plane.api.generated import (
+    WorkItemRead as _WorkItemRead,
+)
+from execution_plane.api.generated import (
     WorkItemSubmit as _WorkItemSubmit,
 )
+
+# Use the ORM enum as the canonical type so callers sharing models.work_item
+# don't end up with a parallel class that mypy treats as incompatible.
+from execution_plane.models.work_item import WorkItemStatus
 
 __all__ = [
     "BackendType",
@@ -54,6 +61,18 @@ class CapabilitiesResponse(BaseModel):
     api_version: str = "v1"
     workloads: list[str] = Field(default_factory=lambda: ["script"])
     result_events: bool = True
+
+
+class WorkItemRead(_WorkItemRead):
+    """Safe work-item representation; excludes credentials and persistence internals."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExecutionTargetRead(_ExecutionTargetRead):
+    """Safe execution-target representation without management credentials."""
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkItemSubmit(_WorkItemSubmit):
@@ -101,6 +120,11 @@ class WorkItemSubmit(_WorkItemSubmit):
 
 class ClusterBindingUpsert(_ClusterBindingUpsert):
     """Versioned OpenShift integration desired state supplied by an authorized client."""
+
+    # Re-declare with plain types so the generated CaCertificate RootModel
+    # wrapper doesn't appear in the OpenAPI spec and credential stays non-nullable.
+    credential: str = Field(default="", repr=False)
+    ca_certificate: str | None = Field(default=None, max_length=65_536, repr=False)  # type: ignore[assignment]
 
     @field_validator("ca_certificate", mode="before")
     @classmethod
