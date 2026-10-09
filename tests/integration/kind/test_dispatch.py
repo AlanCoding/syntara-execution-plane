@@ -73,7 +73,7 @@ async def test_work_item_dispatched_to_kind_cluster_reaches_completed(ep_cluster
 
         await _process_item(claimed, work_store, target_store, worker_managers, settings)
 
-        final_item = await work_store.get(item.id, client_id=client_id, project_id=project_id)
+        final_item = await work_store.get(item.id, client_id=client_id)
 
     assert final_item is not None
     assert final_item.status is WorkItemStatus.COMPLETED, (
