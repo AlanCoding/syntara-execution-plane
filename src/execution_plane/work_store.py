@@ -7,8 +7,6 @@ any state not reachable through them is not a valid transition.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -38,12 +36,12 @@ class WorkItemNotFoundError(LookupError):
         super().__init__(f"Work item {item_id} does not exist")
 
 
-class IdempotencyConflictError(ValueError):
-    """Raised when a caller reuses a request ID with different input."""
+class DuplicateWorkItemError(ValueError):
+    """Raised when a client submits a work item ID that already exists."""
 
-    def __init__(self) -> None:
-        """Describe the idempotency-key conflict."""
-        super().__init__("request_id is already associated with a different execution request")
+    def __init__(self, item_id: uuid.UUID) -> None:
+        """Identify the conflicting ID."""
+        super().__init__(f"Work item {item_id} already exists")
 
 
 class WorkStore(StoreBase):
@@ -52,84 +50,36 @@ class WorkStore(StoreBase):
     async def dispatch(
         self,
         client_id: str,
-        project_id: uuid.UUID,
-        request_id: str,
-        work_correlation_id: uuid.UUID,
+        item_id: uuid.UUID,
         payload: dict[str, Any],
     ) -> WorkItem:
-        """Idempotently insert scoped work and wake the EP worker via pg_notify."""
-        request_hash = hashlib.sha256(
-            json.dumps(
-                {"work_correlation_id": str(work_correlation_id), "payload": payload},
-                sort_keys=True,
-                separators=(",", ":"),
-                default=str,
-            ).encode("utf-8")
-        ).hexdigest()
-        key_filter = (
-            (col(WorkItem.client_id) == client_id)
-            & (col(WorkItem.project_id) == project_id)
-            & (col(WorkItem.request_id) == request_id)
-        )
+        """Insert work with a client-supplied UUID; raises DuplicateWorkItemError on collision."""
         item = WorkItem(
-            id=uuid.uuid4(),
+            id=item_id,
             client_id=client_id,
-            project_id=project_id,
-            request_id=request_id,
-            request_hash=request_hash,
-            work_correlation_id=work_correlation_id,
             status=WorkItemStatus.PENDING,
             payload=payload,
             created_at=datetime.now(UTC),
         )
         async with self._session_context() as session:
             try:
-                result = await session.execute(select(WorkItem).where(key_filter))
-                existing = result.scalars().first()
-                if existing is not None:
-                    self._validate_same_request(existing, request_hash)
-                    return existing
                 session.add(item)
                 # pg_notify is transactional — delivered only after this commit.
                 await session.execute(text(f"SELECT pg_notify('{_NOTIFY_CHANNEL}', '')"))
                 await session.commit()
-            except IntegrityError:
+            except IntegrityError as exc:
                 await session.rollback()
-                result = await session.execute(select(WorkItem).where(key_filter))
-                existing = result.scalars().first()
-                if existing is None:
-                    raise
-                self._validate_same_request(existing, request_hash)
-                return existing
+                raise DuplicateWorkItemError(item_id) from exc
             except Exception:
                 await session.rollback()
                 raise
         return item
 
-    @staticmethod
-    def _validate_same_request(item: WorkItem, request_hash: str) -> None:
-        if item.request_hash != request_hash:
-            raise IdempotencyConflictError
-
-    async def get(self, item_id: uuid.UUID, *, client_id: str, project_id: uuid.UUID) -> WorkItem | None:
-        """Return one work item only inside the authenticated client/project scope."""
+    async def get(self, item_id: uuid.UUID, *, client_id: str) -> WorkItem | None:
+        """Return one work item scoped to the authenticated client."""
         async with self._session_context() as session:
             result = await session.execute(
-                select(WorkItem)
-                .where(col(WorkItem.id) == item_id)
-                .where(col(WorkItem.client_id) == client_id)
-                .where(col(WorkItem.project_id) == project_id)
-            )
-            return result.scalars().first()
-
-    async def get_by_request_id(self, request_id: str, *, client_id: str, project_id: uuid.UUID) -> WorkItem | None:
-        """Resolve an idempotency key without exposing other callers' records."""
-        async with self._session_context() as session:
-            result = await session.execute(
-                select(WorkItem)
-                .where(col(WorkItem.request_id) == request_id)
-                .where(col(WorkItem.client_id) == client_id)
-                .where(col(WorkItem.project_id) == project_id)
+                select(WorkItem).where(col(WorkItem.id) == item_id).where(col(WorkItem.client_id) == client_id)
             )
             return result.scalars().first()
 
@@ -141,25 +91,12 @@ class WorkStore(StoreBase):
             )
             return result.scalar_one_or_none()
 
-    async def list_scoped(self, *, client_id: str, project_id: uuid.UUID, limit: int) -> list[WorkItem]:
-        """Return a bounded list inside the authenticated client/project scope."""
-        async with self._session_context() as session:
-            result = await session.execute(
-                select(WorkItem)
-                .where(col(WorkItem.client_id) == client_id)
-                .where(col(WorkItem.project_id) == project_id)
-                .order_by(col(WorkItem.created_at).desc())
-                .limit(limit)
-            )
-            return list(result.scalars().all())
-
     async def list_for_client(self, *, client_id: str, limit: int) -> list[WorkItem]:
-        """Return bounded work for a client whose signed grant covers all projects."""
+        """Return bounded work for the authenticated client."""
         async with self._session_context() as session:
             result = await session.execute(
                 select(WorkItem)
                 .where(col(WorkItem.client_id) == client_id)
-                .where(col(WorkItem.project_id) != uuid.UUID(int=0))
                 .order_by(col(WorkItem.created_at).desc())
                 .limit(limit)
             )
@@ -192,8 +129,6 @@ class WorkStore(StoreBase):
                             id=uuid.uuid4(),
                             work_item_id=uncertain.id,
                             client_id=uncertain.client_id,
-                            project_id=uncertain.project_id,
-                            request_id=uncertain.request_id,
                             state_revision=1,
                             status=WorkItemStatus.RECONCILIATION_REQUIRED.value,
                             result=uncertain.result,
@@ -235,12 +170,6 @@ class WorkStore(StoreBase):
                         .where(col(ExecutionTarget.status) == TargetStatus.ACTIVE)
                         .where(col(Cluster.enabled).is_(True))
                         .where(col(Cluster.status) == ClusterStatus.ACTIVE)
-                        .where(
-                            or_(
-                                col(Cluster.project_ids).is_(None),
-                                col(Cluster.project_ids).contains([str(item.project_id)]),
-                            )
-                        )
                         .order_by(col(ExecutionTarget.is_default).desc(), col(ExecutionTarget.id))
                         .limit(1)
                         .with_for_update(skip_locked=True, of=ExecutionTarget)
@@ -382,8 +311,6 @@ class WorkStore(StoreBase):
                         id=uuid.uuid4(),
                         work_item_id=item.id,
                         client_id=item.client_id,
-                        project_id=item.project_id,
-                        request_id=item.request_id,
                         state_revision=1,
                         status=status.value,
                         result=result,
@@ -402,7 +329,6 @@ class WorkStore(StoreBase):
         item_id: uuid.UUID,
         *,
         client_id: str,
-        project_id: uuid.UUID,
     ) -> WorkItem:
         """Cancel queued work or durably request termination of a dispatched job."""
         async with self._session_context() as session:
@@ -411,7 +337,6 @@ class WorkStore(StoreBase):
                     select(WorkItem)
                     .where(col(WorkItem.id) == item_id)
                     .where(col(WorkItem.client_id) == client_id)
-                    .where(col(WorkItem.project_id) == project_id)
                     .with_for_update()
                 )
                 item = result.scalars().first()
@@ -457,8 +382,6 @@ class WorkStore(StoreBase):
                         id=uuid.uuid4(),
                         work_item_id=item.id,
                         client_id=item.client_id,
-                        project_id=item.project_id,
-                        request_id=item.request_id,
                         state_revision=1,
                         status=WorkItemStatus.RECONCILIATION_REQUIRED.value,
                         result=item.result,
@@ -499,8 +422,6 @@ class WorkStore(StoreBase):
                             id=uuid.uuid4(),
                             work_item_id=item.id,
                             client_id=item.client_id,
-                            project_id=item.project_id,
-                            request_id=item.request_id,
                             state_revision=1,
                             status=WorkItemStatus.CANCELLED.value,
                             result=result,
@@ -530,61 +451,6 @@ class WorkStore(StoreBase):
         if item.claim_owner_id != claim_owner_id or item.claim_generation != claim_generation:
             raise StaleClaimError("Worker claim is no longer current")  # noqa: EM101, TRY003
 
-    async def request_cancel_by_request_id(
-        self,
-        request_id: str,
-        *,
-        client_id: str,
-        project_id: uuid.UUID,
-        work_correlation_id: uuid.UUID,
-    ) -> WorkItem:
-        """Cancel by stable key, inserting a tombstone if submission has not arrived."""
-        key_filter = (
-            (col(WorkItem.client_id) == client_id)
-            & (col(WorkItem.project_id) == project_id)
-            & (col(WorkItem.request_id) == request_id)
-        )
-        request_hash = hashlib.sha256(
-            f"cancelled-before-submit:{client_id}:{project_id}:{request_id}".encode()
-        ).hexdigest()
-        async with self._session_context() as session:
-            try:
-                result = await session.execute(select(WorkItem).where(key_filter).with_for_update())
-                item = result.scalars().first()
-                if item is None:
-                    now = datetime.now(UTC)
-                    item = WorkItem(
-                        id=uuid.uuid4(),
-                        client_id=client_id,
-                        project_id=project_id,
-                        request_id=request_id,
-                        request_hash=request_hash,
-                        work_correlation_id=work_correlation_id,
-                        status=WorkItemStatus.CANCELLED,
-                        payload={},
-                        result={"cancelled": True, "execution_started": False},
-                        created_at=now,
-                        completed_at=now,
-                    )
-                    session.add(item)
-                else:
-                    await self._request_cancel_locked(session, item)
-                await session.commit()
-                return item
-            except IntegrityError:
-                await session.rollback()
-                existing = await self.get_by_request_id(request_id, client_id=client_id, project_id=project_id)
-                if existing is None:
-                    raise
-                return await self.request_cancel(
-                    existing.id,
-                    client_id=client_id,
-                    project_id=project_id,
-                )
-            except Exception:
-                await session.rollback()
-                raise
-
     async def _request_cancel_locked(self, session: AsyncSession, item: WorkItem) -> None:
         """Apply a cancellation transition while the work-item row is locked."""
         if item.status in {
@@ -613,8 +479,6 @@ class WorkStore(StoreBase):
                 id=uuid.uuid4(),
                 work_item_id=item.id,
                 client_id=item.client_id,
-                project_id=item.project_id,
-                request_id=item.request_id,
                 state_revision=1,
                 status=WorkItemStatus.CANCELLED.value,
                 result=item.result,

@@ -59,7 +59,6 @@ class ExecutionTargetRegistry:
         eligible_only: bool = False,  # noqa: FBT001, FBT002
         status: TargetStatus | None = None,
         limit: int | None = None,
-        project_id: uuid.UUID | None = None,
     ) -> list[ExecutionTarget]:
         """List targets, optionally restricted to those eligible for new work."""
         return await self._store.list(
@@ -67,7 +66,6 @@ class ExecutionTargetRegistry:
             eligible_only=eligible_only,
             status=status,
             limit=limit,
-            project_id=project_id,
         )
 
     async def request_delete(self, target_id: uuid.UUID, updated_by: uuid.UUID) -> ExecutionTarget:
