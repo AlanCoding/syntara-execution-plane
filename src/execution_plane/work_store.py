@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, case, or_, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
 
 from execution_plane.models.cluster import Cluster, ClusterStatus
@@ -35,6 +36,14 @@ class WorkItemNotFoundError(LookupError):
         super().__init__(f"Work item {item_id} does not exist")
 
 
+class DuplicateWorkItemError(ValueError):
+    """Raised when a client submits a work item ID that already exists."""
+
+    def __init__(self, item_id: uuid.UUID) -> None:
+        """Identify the conflicting ID."""
+        super().__init__(f"Work item {item_id} already exists")
+
+
 class WorkStore(StoreBase):
     """Persist work item lifecycle transitions and own database resources."""
 
@@ -44,7 +53,7 @@ class WorkStore(StoreBase):
         item_id: uuid.UUID,
         payload: dict[str, Any],
     ) -> WorkItem:
-        """Insert work with a client-supplied UUID, ignoring duplicate submissions."""
+        """Insert work with a client-supplied UUID; raises DuplicateWorkItemError on collision."""
         item = WorkItem(
             id=item_id,
             client_id=client_id,
@@ -58,13 +67,11 @@ class WorkStore(StoreBase):
                 # pg_notify is transactional — delivered only after this commit.
                 await session.execute(text(f"SELECT pg_notify('{_NOTIFY_CHANNEL}', '')"))
                 await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                raise DuplicateWorkItemError(item_id) from exc
             except Exception:
                 await session.rollback()
-                # ON CONFLICT DO NOTHING equivalent: re-fetch if PK collision
-                result = await session.execute(select(WorkItem).where(col(WorkItem.id) == item_id))
-                existing = result.scalars().first()
-                if existing is not None:
-                    return existing
                 raise
         return item
 

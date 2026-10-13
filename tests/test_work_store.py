@@ -8,10 +8,11 @@ from typing import Any, Self
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 
 from execution_plane.models.work_item import WorkItem, WorkItemStatus
-from execution_plane.work_store import WorkStore
+from execution_plane.work_store import DuplicateWorkItemError, WorkStore
 
 
 class _Session:
@@ -219,4 +220,20 @@ async def test_accepts_engine_options() -> None:
 
     assert store._engine is not None
     assert isinstance(store._engine.pool, NullPool)
+    await store.close()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_raises_on_duplicate_id() -> None:
+    """Submitting the same work item ID twice raises DuplicateWorkItemError."""
+    store = _store()
+    item_id = uuid.uuid4()
+    session = _Session()
+    session.commit = AsyncMock(side_effect=IntegrityError(None, None, Exception()))
+    store._session_factory = _SessionFactory(session)  # type: ignore[assignment]
+
+    with pytest.raises(DuplicateWorkItemError):
+        await store.dispatch("test-client", item_id, {"input_config": {}})
+
+    assert session.rollbacks == 1
     await store.close()

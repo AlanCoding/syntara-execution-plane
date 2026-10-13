@@ -13,16 +13,19 @@ from datetime import UTC, datetime
 
 import pytest
 import sqlalchemy as sa
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from execution_plane.api.auth import ServiceIdentity, get_service_identity
+from execution_plane.api.main import create_app
 from execution_plane.models.cluster import Cluster
 from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane.models.completion_event import CompletionEvent
 from execution_plane.models.constants import EP_SCHEMA
 from execution_plane.models.execution_target import ExecutionTarget as _ExecutionTarget  # noqa: F401
 from execution_plane.models.work_item import WorkItem, WorkItemStatus
-from execution_plane.work_store import WorkStore
+from execution_plane.work_store import DuplicateWorkItemError, WorkStore
 
 
 @pytest.mark.asyncio
@@ -163,6 +166,81 @@ async def test_mapped_rows_reload_project_ids_and_work_item_status() -> None:  #
                 event = await session.scalar(select(CompletionEvent).where(CompletionEvent.work_item_id == item.id))
                 if event is not None:
                     await session.delete(event)
+                await session.delete(item)
+            await session.commit()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_duplicate_id_raises() -> None:
+    """Dispatching the same work item ID twice raises DuplicateWorkItemError."""
+    database_url = os.environ.get("EP_TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("EP_TEST_DATABASE_URL must point to a disposable, migrated EP database")
+
+    item_id = uuid.uuid4()
+    payload = {"invocation": {"version": 1}}
+
+    async with WorkStore.from_database_url(database_url) as store:
+        try:
+            await store.dispatch(client_id="test-duplicate", item_id=item_id, payload=payload)
+            with pytest.raises(DuplicateWorkItemError):
+                await store.dispatch(client_id="test-duplicate", item_id=item_id, payload=payload)
+        finally:
+            engine = create_async_engine(database_url)
+            session_factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with session_factory() as session:
+                item = await session.get(WorkItem, item_id)
+                if item is not None:
+                    await session.delete(item)
+                await session.commit()
+            await engine.dispose()
+
+
+_VALID_INVOCATION_PAYLOAD = {
+    "image": "quay.io/example/node:latest",
+    "invocation": {
+        "version": 1,
+        "operation": "execute",
+        "inputs": {},
+        "credentials": {},
+        "workflow_context": {},
+        "settings": {},
+        "timeout_seconds": 300,
+        "max_output_bytes": 1048576,
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_submit_duplicate_work_item_via_api_returns_409() -> None:
+    """Submitting the same work item ID twice through the HTTP API returns 409."""
+    database_url = os.environ.get("EP_TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("EP_TEST_DATABASE_URL must point to a disposable, migrated EP database")
+
+    item_id = uuid.uuid4()
+    engine = create_async_engine(database_url)
+    app = create_app()
+    app.state.ep_engine = engine
+    app.dependency_overrides[get_service_identity] = lambda: ServiceIdentity(
+        client_id="test-duplicate-api", scopes=frozenset({"work-items:submit"})
+    )
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            body = {"id": str(item_id), "workload_type": "script", "payload": _VALID_INVOCATION_PAYLOAD}
+            first = await client.post("/v1/work-items", json=body)
+            assert first.status_code == 202
+
+            second = await client.post("/v1/work-items", json=body)
+            assert second.status_code == 409
+            assert second.json()["detail"] == f"Work item {item_id} already exists"
+    finally:
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            item = await session.get(WorkItem, item_id)
+            if item is not None:
                 await session.delete(item)
             await session.commit()
         await engine.dispose()

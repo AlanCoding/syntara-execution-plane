@@ -29,6 +29,7 @@ from execution_plane.execution_target.execution_target_registry import Execution
 from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
 from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane.work_store import (
+    DuplicateWorkItemError,
     WorkItemNotFoundError,
     WorkStore,
 )
@@ -91,11 +92,14 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     ) -> WorkItemRead:
         store = WorkStore.from_engine(request.app.state.ep_engine)
         payload = {"workload_type": submission.workload_type, **submission.payload}
-        item = await store.dispatch(
-            client_id=identity.client_id,
-            item_id=submission.id,
-            payload=payload,
-        )
+        try:
+            item = await store.dispatch(
+                client_id=identity.client_id,
+                item_id=submission.id,
+                payload=payload,
+            )
+        except DuplicateWorkItemError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
         return await _work_item_read(store, item)
 
     @app.get("/v1/work-items", response_model=list[WorkItemRead])
