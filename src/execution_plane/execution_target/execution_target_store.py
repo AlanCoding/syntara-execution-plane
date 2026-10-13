@@ -132,7 +132,6 @@ class ExecutionTargetStore(StoreBase):
         eligible_only: bool = False,  # noqa: FBT001, FBT002
         status: TargetStatus | None = None,
         limit: int | None = None,
-        project_id: uuid.UUID | None = None,
     ) -> list[ExecutionTarget]:
         """List targets, optionally restricting results to work-eligible targets."""
         statement = select(ExecutionTarget)
@@ -147,12 +146,6 @@ class ExecutionTargetStore(StoreBase):
                 .where(col(ExecutionTarget.status) == TargetStatus.ACTIVE)
                 .where(col(Cluster.enabled).is_(True))
                 .where(col(Cluster.status) == ClusterStatus.ACTIVE)
-            )
-        if project_id is not None:
-            if not eligible_only:
-                statement = statement.join(Cluster, col(Cluster.id) == col(ExecutionTarget.cluster_id))
-            statement = statement.where(
-                col(Cluster.project_ids).is_(None) | col(Cluster.project_ids).contains([str(project_id)])
             )
         if limit is not None:
             statement = statement.limit(limit)

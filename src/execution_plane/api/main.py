@@ -122,7 +122,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         limit: Annotated[int, Query(ge=1, le=200)] = 50,
     ) -> list[ExecutionTargetRead]:
         registry = ExecutionTargetRegistry(ExecutionTargetStore.from_engine(request.app.state.ep_engine))
-        targets = await registry.list(limit=limit, project_id=None)
+        targets = await registry.list(limit=limit)
         return [ExecutionTargetRead.model_validate(target) for target in targets]
 
     @app.put(
