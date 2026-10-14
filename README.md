@@ -22,6 +22,19 @@ uv run ruff format --check src tests
 uv run mypy --strict src
 ```
 
+`make test-coverage` runs unit tests and measures both `execution_plane` and
+`execution_plane_client`, including branch coverage. It prints a coverage summary
+and writes `coverage.xml`, `.coverage`, and `pytest-results.xml`. Override
+`TEST_ARGS` to select another suite, for example
+`make test-coverage TEST_ARGS='tests/client -v'`.
+
+CI collects reports from the unit, PostgreSQL, and Kubernetes test jobs, then runs
+`make coverage-combine` to merge the raw coverage data and JUnit results. The
+`ep-coverage-combined` artifact contains the combined XML reports and an HTML
+coverage report. To combine downloaded reports locally, extract each test job's
+artifact into its own directory under `coverage-artifacts/` and run the same
+target.
+
 For a separate local EP database, copy `.env.example` to `.env` if you need to
 override defaults. Generate local secrets and TLS material first (`make setup`,
 or `./tools/generate_secrets.sh` and `uv run python tools/generate_certs.py`).
@@ -138,3 +151,17 @@ The management image runs as UID 1001. Its default command starts the controller
 ## Ownership
 
 Use this repository for EP worker, registry, migration, and placement changes. Make coordinated API, authorization, integration, and workflow changes in [Syntara](https://github.com/syntara-orchestration/syntara), and link the changes across pull requests.
+
+## Command API and shared contracts
+
+All mutations use `POST /v1/commands`. Work, cluster-binding and execution-target
+state is available through the resource query endpoints. Commands are not
+persisted, and no command-status or child-history endpoint is provided. Work
+completion is delivered as a `work.execute.completed` command.
+
+The separately installable `src/execution_plane_client` package contains only
+command contracts, validation, the handler registry and handler protocol. EP
+owns the routes, handlers and existing domain persistence. See
+[the integration contract](docs/integration.md) for payloads, permissions,
+resource identities and callback configuration. The former REST mutation API
+and completion-event wire format are replaced.
