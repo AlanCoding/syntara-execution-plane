@@ -2,9 +2,10 @@
 
 import json
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlmodel import col
 
@@ -15,6 +16,24 @@ from execution_plane.models.cluster import Cluster
 from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane.models.execution_target import ExecutionTarget
 from execution_plane.work_store import WorkStore
+
+
+def _apply_created_at_cursor(
+    statement: Select[Any],
+    cursor: dict[str, Any],
+    ts_col: Any,  # noqa: ANN401
+    id_col: Any,  # noqa: ANN401
+) -> Select[Any]:
+    """Apply keyset WHERE + ORDER BY for a created_at-sorted cursor."""
+    anchor_ts = datetime.fromisoformat(cursor["created_at"])
+    anchor_id = UUID(cursor["id"])
+    if cursor.get("direction") == "prev":
+        return statement.where(
+            (ts_col < anchor_ts) | ((ts_col == anchor_ts) & (id_col < anchor_id))
+        ).order_by(ts_col.desc(), id_col.desc())
+    return statement.where(
+        (ts_col > anchor_ts) | ((ts_col == anchor_ts) & (id_col > anchor_id))
+    ).order_by(ts_col.asc(), id_col.asc())
 
 
 class EPResourceQueries:
@@ -74,31 +93,12 @@ class EPResourceQueries:
         statement = select(ClusterBinding).where(col(ClusterBinding.client_id) == self._client_id)
 
         if cursor:
-            c = decode_cursor(cursor)
-            anchor_ts = datetime.fromisoformat(c["created_at"])
-            anchor_id = UUID(c["id"])
-            if c.get("direction") == "prev":
-                statement = statement.where(
-                    (col(ClusterBinding.created_at) < anchor_ts)
-                    | (
-                        (col(ClusterBinding.created_at) == anchor_ts)
-                        & (col(ClusterBinding.source_integration_id) < anchor_id)
-                    )
-                ).order_by(
-                    col(ClusterBinding.created_at).desc(),
-                    col(ClusterBinding.source_integration_id).desc(),
-                )
-            else:
-                statement = statement.where(
-                    (col(ClusterBinding.created_at) > anchor_ts)
-                    | (
-                        (col(ClusterBinding.created_at) == anchor_ts)
-                        & (col(ClusterBinding.source_integration_id) > anchor_id)
-                    )
-                ).order_by(
-                    col(ClusterBinding.created_at).asc(),
-                    col(ClusterBinding.source_integration_id).asc(),
-                )
+            statement = _apply_created_at_cursor(
+                statement,
+                decode_cursor(cursor),
+                col(ClusterBinding.created_at),
+                col(ClusterBinding.source_integration_id),
+            )
         else:
             statement = statement.order_by(
                 col(ClusterBinding.created_at).asc(),
@@ -140,19 +140,12 @@ class EPResourceQueries:
             statement = statement.where(col(ExecutionTarget.id) == resource_id)
 
         if cursor:
-            c = decode_cursor(cursor)
-            anchor_ts = datetime.fromisoformat(c["created_at"])
-            anchor_id = UUID(c["id"])
-            if c.get("direction") == "prev":
-                statement = statement.where(
-                    (col(ExecutionTarget.created_at) < anchor_ts)
-                    | ((col(ExecutionTarget.created_at) == anchor_ts) & (col(ExecutionTarget.id) < anchor_id))
-                ).order_by(col(ExecutionTarget.created_at).desc(), col(ExecutionTarget.id).desc())
-            else:
-                statement = statement.where(
-                    (col(ExecutionTarget.created_at) > anchor_ts)
-                    | ((col(ExecutionTarget.created_at) == anchor_ts) & (col(ExecutionTarget.id) > anchor_id))
-                ).order_by(col(ExecutionTarget.created_at).asc(), col(ExecutionTarget.id).asc())
+            statement = _apply_created_at_cursor(
+                statement,
+                decode_cursor(cursor),
+                col(ExecutionTarget.created_at),
+                col(ExecutionTarget.id),
+            )
         else:
             statement = statement.order_by(col(ExecutionTarget.created_at).asc(), col(ExecutionTarget.id).asc())
 
