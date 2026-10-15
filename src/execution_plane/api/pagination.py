@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime
 from typing import Annotated, Any, Generic, TypeVar
+from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -20,6 +22,7 @@ class EPListParams(BaseModel):
 
     limit: int = Field(default=20, gt=0, le=100)
     cursor: str | None = Field(default=None)
+    # sort is accepted for AO compatibility; EP currently only orders by created_at.
     sort: Annotated[str, StringConstraints(pattern=r"^-?[a-z][a-z0-9_]*$")] | None = Field(default=None)
     include_total: bool = Field(default=False)
 
@@ -31,6 +34,22 @@ class ResourcesResponse(BaseModel, Generic[T]):  # noqa: UP046
     next: str | None = None
     prev: str | None = None
     total: int | None = None
+
+
+def serialize_sort_value(value: Any) -> str:  # noqa: ANN401
+    """Serialize a sort column value to a string for cursor storage.
+
+    Mirrors AO's serialize_sort_value; handles datetime, UUID, bool, int, str, None.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
 
 
 def encode_cursor(data: dict[str, Any]) -> str:
@@ -76,7 +95,7 @@ def generate_response(
                 "direction": "next",
                 "sort_field": sort_field,
                 "sort_direction": sort_direction,
-                "sort_value": getattr(last, sort_field).isoformat(),
+                "sort_value": serialize_sort_value(getattr(last, sort_field)),
             }
         )
 
@@ -90,7 +109,7 @@ def generate_response(
                 "direction": "prev",
                 "sort_field": sort_field,
                 "sort_direction": sort_direction,
-                "sort_value": getattr(first, sort_field).isoformat(),
+                "sort_value": serialize_sort_value(getattr(first, sort_field)),
             }
         )
 
