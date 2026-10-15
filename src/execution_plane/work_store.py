@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, case, or_, select, text
+from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
 
@@ -99,14 +99,11 @@ class WorkStore(StoreBase):
         cursor: dict | None = None,
     ) -> list[WorkItem]:
         """Return bounded work for the authenticated client."""
-        from uuid import UUID as _UUID
-        from datetime import datetime as _dt
-
         statement = select(WorkItem).where(col(WorkItem.client_id) == client_id)
 
         if cursor:
-            anchor_ts = _dt.fromisoformat(cursor["created_at"])
-            anchor_id = _UUID(cursor["id"])
+            anchor_ts = datetime.fromisoformat(cursor["created_at"])
+            anchor_id = uuid.UUID(cursor["id"])
             if cursor.get("direction") == "prev":
                 # Going backwards in time (toward newer items) from a DESC anchor
                 statement = statement.where(
@@ -128,7 +125,6 @@ class WorkStore(StoreBase):
 
     async def count_for_client(self, *, client_id: str) -> int:
         """Return total work item count for the authenticated client."""
-        from sqlalchemy import func
         async with self._session_context() as session:
             result = await session.execute(
                 select(func.count()).select_from(WorkItem).where(col(WorkItem.client_id) == client_id)

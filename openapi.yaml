@@ -49,20 +49,41 @@ paths:
         required: false
         schema:
           type: integer
-          maximum: 200
-          minimum: 1
-          default: 50
+          maximum: 100
+          exclusiveMinimum: 0
+          default: 20
           title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - name: sort
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^-?[a-z][a-z0-9_]*$
+          - type: 'null'
+          title: Sort
+      - name: include_total
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Total
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WorkItemRead'
-                title: Response Work Items V1 Work Items Get
+                $ref: '#/components/schemas/ResourcesResponse_WorkItemRead_'
         '422':
           description: Validation Error
           content:
@@ -108,20 +129,41 @@ paths:
         required: false
         schema:
           type: integer
-          maximum: 200
-          minimum: 1
-          default: 50
+          maximum: 100
+          exclusiveMinimum: 0
+          default: 20
           title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - name: sort
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^-?[a-z][a-z0-9_]*$
+          - type: 'null'
+          title: Sort
+      - name: include_total
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Total
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ClusterRead'
-                title: Response Clusters V1 Clusters Get
+                $ref: '#/components/schemas/ResourcesResponse_ClusterRead_'
         '422':
           description: Validation Error
           content:
@@ -167,20 +209,41 @@ paths:
         required: false
         schema:
           type: integer
-          maximum: 200
-          minimum: 1
-          default: 50
+          maximum: 100
+          exclusiveMinimum: 0
+          default: 20
           title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - name: sort
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^-?[a-z][a-z0-9_]*$
+          - type: 'null'
+          title: Sort
+      - name: include_total
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Total
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ExecutionTargetRead'
-                title: Response Targets V1 Execution Targets Get
+                $ref: '#/components/schemas/ResourcesResponse_ExecutionTargetRead_'
         '422':
           description: Validation Error
           content:
@@ -294,6 +357,10 @@ components:
             type: array
           - type: 'null'
           title: Project Ids
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
         updated_at:
           type: string
           format: date-time
@@ -312,6 +379,7 @@ components:
       - enabled
       - labels
       - project_ids
+      - created_at
       - updated_at
       title: ClusterRead
       description: Desired and observed cluster binding state, keyed by integration
@@ -468,6 +536,84 @@ components:
       - resource_id
       title: ResourceReference
       description: Safe reference from a command to a participant-owned resource.
+    ResourcesResponse_ClusterRead_:
+      properties:
+        resources:
+          items:
+            $ref: '#/components/schemas/ClusterRead'
+          type: array
+          title: Resources
+        next:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next
+        prev:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prev
+        total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total
+      type: object
+      required:
+      - resources
+      title: ResourcesResponse[ClusterRead]
+    ResourcesResponse_ExecutionTargetRead_:
+      properties:
+        resources:
+          items:
+            $ref: '#/components/schemas/ExecutionTargetRead'
+          type: array
+          title: Resources
+        next:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next
+        prev:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prev
+        total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total
+      type: object
+      required:
+      - resources
+      title: ResourcesResponse[ExecutionTargetRead]
+    ResourcesResponse_WorkItemRead_:
+      properties:
+        resources:
+          items:
+            $ref: '#/components/schemas/WorkItemRead'
+          type: array
+          title: Resources
+        next:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next
+        prev:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prev
+        total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total
+      type: object
+      required:
+      - resources
+      title: ResourcesResponse[WorkItemRead]
     TargetStatus:
       type: string
       enum:

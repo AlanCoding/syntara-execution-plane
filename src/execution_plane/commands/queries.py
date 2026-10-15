@@ -33,7 +33,7 @@ class EPResourceQueries:
             client_id=self._client_id, limit=limit, cursor=parsed_cursor
         )
         if parsed_cursor and parsed_cursor.get("direction") == "prev":
-            items = list(reversed(items))
+            items.reverse()
         return [
             WorkItemRead.model_validate(item).model_copy(
                 update={"result": None, "result_omitted": item.result is not None}
@@ -97,7 +97,7 @@ class EPResourceQueries:
         async with self._sessions() as session:
             rows = list(await session.scalars(statement.limit(limit)))
         if cursor and decode_cursor(cursor).get("direction") == "prev":
-            rows = list(reversed(rows))
+            rows.reverse()
         return [ClusterRead.model_validate(row) for row in rows]
 
     async def count_clusters(self) -> int:
@@ -156,7 +156,7 @@ class EPResourceQueries:
         async with self._sessions() as session:
             rows = list(await session.scalars(statement.limit(limit)))
         if cursor and decode_cursor(cursor).get("direction") == "prev":
-            rows = list(reversed(rows))
+            rows.reverse()
         return [ExecutionTargetRead.model_validate(row) for row in rows]
 
     async def target(self, resource_id: UUID) -> ExecutionTargetRead:

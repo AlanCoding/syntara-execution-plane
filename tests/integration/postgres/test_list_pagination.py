@@ -210,25 +210,25 @@ async def test_work_items_include_total(pg_client):
 
 
 async def test_work_items_invalid_limit_zero(pg_client):
-    client, sessions = pg_client
+    client, _ = pg_client
     response = await client.get("/v1/work-items", params={"limit": 0})
     assert response.status_code == 422
 
 
 async def test_work_items_invalid_limit_over_max(pg_client):
-    client, sessions = pg_client
+    client, _ = pg_client
     response = await client.get("/v1/work-items", params={"limit": 101})
     assert response.status_code == 422
 
 
 async def test_work_items_invalid_sort_pattern(pg_client):
-    client, sessions = pg_client
+    client, _ = pg_client
     response = await client.get("/v1/work-items", params={"sort": "INVALID SORT"})
     assert response.status_code == 422
 
 
 async def test_work_items_malformed_cursor(pg_client):
-    client, sessions = pg_client
+    client, _ = pg_client
     response = await client.get("/v1/work-items", params={"cursor": "not-valid-base64!!!"})
     assert response.status_code == 422
 
@@ -297,13 +297,13 @@ async def test_clusters_include_total(pg_client):
 
 
 async def test_clusters_invalid_limit(pg_client):
-    client, sessions = pg_client
+    client, _ = pg_client
     assert (await client.get("/v1/clusters", params={"limit": 0})).status_code == 422
     assert (await client.get("/v1/clusters", params={"limit": 101})).status_code == 422
 
 
 async def test_clusters_malformed_cursor(pg_client):
-    client, sessions = pg_client
+    client, _ = pg_client
     response = await client.get("/v1/clusters", params={"cursor": "!!!"})
     assert response.status_code == 422
 
@@ -347,13 +347,13 @@ async def test_execution_targets_include_total(pg_client):
 
 
 async def test_execution_targets_invalid_limit(pg_client):
-    client, sessions = pg_client
+    client, _ = pg_client
     assert (await client.get("/v1/execution-targets", params={"limit": 0})).status_code == 422
     assert (await client.get("/v1/execution-targets", params={"limit": 101})).status_code == 422
 
 
 async def test_execution_targets_malformed_cursor(pg_client):
-    client, sessions = pg_client
+    client, _ = pg_client
     response = await client.get("/v1/execution-targets", params={"cursor": "!!!"})
     assert response.status_code == 422
 

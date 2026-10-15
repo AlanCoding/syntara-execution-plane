@@ -80,7 +80,7 @@ def strict_json(data: bytes) -> object:
         raise ValueError(error) from None
 
 
-def create_app() -> FastAPI:  # noqa: C901
+def create_app() -> FastAPI:  # noqa: C901, PLR0915
     """Replace legacy mutations with commands; expose only resource state."""
     app = FastAPI(
         title="Execution Plane API",

@@ -12,9 +12,12 @@ T = TypeVar("T")
 
 VALID_CURSOR_FIELDS = {"id", "created_at", "direction", "sort_field", "sort_direction", "sort_value"}
 MAX_CURSOR_BYTES = 1024
+_CURSOR_NOT_OBJECT = "cursor must be a JSON object"
 
 
 class EPListParams(BaseModel):
+    """Query parameters accepted by all EP list endpoints."""
+
     limit: int = Field(default=20, gt=0, le=100)
     cursor: str | None = Field(default=None)
     sort: Annotated[str, StringConstraints(pattern=r"^-?[a-z][a-z0-9_]*$")] | None = Field(default=None)
@@ -22,6 +25,8 @@ class EPListParams(BaseModel):
 
 
 class ResourcesResponse(BaseModel, Generic[T]):  # noqa: UP046
+    """Pagination envelope returned by all EP list endpoints."""
+
     resources: list[T]
     next: str | None = None
     prev: str | None = None
@@ -29,19 +34,23 @@ class ResourcesResponse(BaseModel, Generic[T]):  # noqa: UP046
 
 
 def encode_cursor(data: dict) -> str:
+    """Encode a cursor dict to an opaque base64-JSON token."""
     return base64.b64encode(json.dumps(data, sort_keys=True).encode()).decode()
 
 
 def decode_cursor(token: str) -> dict:
+    """Decode and whitelist-filter a cursor token; raise ValueError on invalid input."""
     if len(token.encode()) > MAX_CURSOR_BYTES:
-        raise ValueError("cursor too large")
+        msg = "cursor too large"
+        raise ValueError(msg)
     try:
         raw = base64.b64decode(token.encode()).decode()
         data = json.loads(raw)
     except Exception as exc:
-        raise ValueError("invalid cursor") from exc
+        msg = "invalid cursor"
+        raise ValueError(msg) from exc
     if not isinstance(data, dict):
-        raise ValueError("cursor must be a JSON object")
+        raise TypeError(_CURSOR_NOT_OBJECT)
     return {k: v for k, v in data.items() if k in VALID_CURSOR_FIELDS}
 
 
@@ -52,7 +61,6 @@ def generate_response(
     *,
     sort_field: str = "created_at",
     sort_direction: str = "asc",
-    include_total: int | None = None,
 ) -> tuple[list, str | None, str | None]:
     """Return (trimmed_items, next_cursor, prev_cursor)."""
     has_more = len(items) > limit
