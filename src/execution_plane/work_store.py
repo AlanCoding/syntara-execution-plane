@@ -91,16 +91,49 @@ class WorkStore(StoreBase):
             )
             return result.scalar_one_or_none()
 
-    async def list_for_client(self, *, client_id: str, limit: int) -> list[WorkItem]:
+    async def list_for_client(
+        self,
+        *,
+        client_id: str,
+        limit: int,
+        cursor: dict | None = None,
+    ) -> list[WorkItem]:
         """Return bounded work for the authenticated client."""
+        from uuid import UUID as _UUID
+        from datetime import datetime as _dt
+
+        statement = select(WorkItem).where(col(WorkItem.client_id) == client_id)
+
+        if cursor:
+            anchor_ts = _dt.fromisoformat(cursor["created_at"])
+            anchor_id = _UUID(cursor["id"])
+            if cursor.get("direction") == "prev":
+                # Going backwards in time (toward newer items) from a DESC anchor
+                statement = statement.where(
+                    (col(WorkItem.created_at) > anchor_ts)
+                    | ((col(WorkItem.created_at) == anchor_ts) & (col(WorkItem.id) > anchor_id))
+                ).order_by(col(WorkItem.created_at).asc(), col(WorkItem.id).asc())
+            else:
+                # Going forward (toward older items) in DESC sort
+                statement = statement.where(
+                    (col(WorkItem.created_at) < anchor_ts)
+                    | ((col(WorkItem.created_at) == anchor_ts) & (col(WorkItem.id) < anchor_id))
+                ).order_by(col(WorkItem.created_at).desc(), col(WorkItem.id).desc())
+        else:
+            statement = statement.order_by(col(WorkItem.created_at).desc(), col(WorkItem.id).desc())
+
+        async with self._session_context() as session:
+            result = await session.execute(statement.limit(limit))
+            return list(result.scalars().all())
+
+    async def count_for_client(self, *, client_id: str) -> int:
+        """Return total work item count for the authenticated client."""
+        from sqlalchemy import func
         async with self._session_context() as session:
             result = await session.execute(
-                select(WorkItem)
-                .where(col(WorkItem.client_id) == client_id)
-                .order_by(col(WorkItem.created_at).desc())
-                .limit(limit)
+                select(func.count()).select_from(WorkItem).where(col(WorkItem.client_id) == client_id)
             )
-            return list(result.scalars().all())
+            return result.scalar_one()
 
     async def claim_one(self) -> WorkItem | None:
         """Claim queued work or safely recover a pre-dispatch claim lease."""

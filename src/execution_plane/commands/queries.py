@@ -1,12 +1,14 @@
 """Client-scoped queries of domain resources, without command history."""
 
 import json
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlmodel import col
 
+from execution_plane.api.pagination import decode_cursor
 from execution_plane.api.schemas import ClusterRead, ExecutionTargetRead, WorkItemRead
 from execution_plane.commands.clusters import ResourceNotFoundError
 from execution_plane.models.cluster import Cluster
@@ -24,15 +26,24 @@ class EPResourceQueries:
         self._work = WorkStore.from_engine(engine)
         self._client_id = client_id
 
-    async def work_items(self, limit: int) -> list[WorkItemRead]:
+    async def work_items(self, limit: int, *, cursor: str | None = None) -> list[WorkItemRead]:
         """List work without embedding potentially large results."""
-        items = await self._work.list_for_client(client_id=self._client_id, limit=limit)
+        parsed_cursor = decode_cursor(cursor) if cursor else None
+        items = await self._work.list_for_client(
+            client_id=self._client_id, limit=limit, cursor=parsed_cursor
+        )
+        if parsed_cursor and parsed_cursor.get("direction") == "prev":
+            items = list(reversed(items))
         return [
             WorkItemRead.model_validate(item).model_copy(
                 update={"result": None, "result_omitted": item.result is not None}
             )
             for item in items
         ]
+
+    async def count_work_items(self) -> int:
+        """Return total work item count for the authenticated client."""
+        return await self._work.count_for_client(client_id=self._client_id)
 
     async def work_item(self, resource_id: UUID) -> WorkItemRead:
         """Recover the complete stored result without needing command history."""
@@ -47,16 +58,57 @@ class EPResourceQueries:
             read.completion_event_id, read.state_revision = event.id, event.state_revision
         return read
 
-    async def clusters(self, limit: int) -> list[ClusterRead]:
+    async def clusters(self, limit: int, *, cursor: str | None = None) -> list[ClusterRead]:
         """List binding resources, including pending setup and deletion."""
-        async with self._sessions() as session:
-            rows = await session.scalars(
-                select(ClusterBinding)
-                .where(col(ClusterBinding.client_id) == self._client_id)
-                .order_by(col(ClusterBinding.created_at), col(ClusterBinding.source_integration_id))
-                .limit(limit)
+        statement = select(ClusterBinding).where(col(ClusterBinding.client_id) == self._client_id)
+
+        if cursor:
+            c = decode_cursor(cursor)
+            anchor_ts = datetime.fromisoformat(c["created_at"])
+            anchor_id = UUID(c["id"])
+            if c.get("direction") == "prev":
+                statement = statement.where(
+                    (col(ClusterBinding.created_at) < anchor_ts)
+                    | (
+                        (col(ClusterBinding.created_at) == anchor_ts)
+                        & (col(ClusterBinding.source_integration_id) < anchor_id)
+                    )
+                ).order_by(
+                    col(ClusterBinding.created_at).desc(),
+                    col(ClusterBinding.source_integration_id).desc(),
+                )
+            else:
+                statement = statement.where(
+                    (col(ClusterBinding.created_at) > anchor_ts)
+                    | (
+                        (col(ClusterBinding.created_at) == anchor_ts)
+                        & (col(ClusterBinding.source_integration_id) > anchor_id)
+                    )
+                ).order_by(
+                    col(ClusterBinding.created_at).asc(),
+                    col(ClusterBinding.source_integration_id).asc(),
+                )
+        else:
+            statement = statement.order_by(
+                col(ClusterBinding.created_at).asc(),
+                col(ClusterBinding.source_integration_id).asc(),
             )
-            return [ClusterRead.model_validate(row) for row in rows]
+
+        async with self._sessions() as session:
+            rows = list(await session.scalars(statement.limit(limit)))
+        if cursor and decode_cursor(cursor).get("direction") == "prev":
+            rows = list(reversed(rows))
+        return [ClusterRead.model_validate(row) for row in rows]
+
+    async def count_clusters(self) -> int:
+        """Return total cluster count for the authenticated client."""
+        async with self._sessions() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(ClusterBinding)
+                .where(col(ClusterBinding.client_id) == self._client_id)
+            )
+            return result.scalar_one()
 
     async def cluster(self, resource_id: UUID) -> ClusterRead:
         """Read binding state using its stable source integration UUID."""
@@ -66,16 +118,46 @@ class EPResourceQueries:
                 raise ResourceNotFoundError
             return ClusterRead.model_validate(row)
 
-    async def targets(self, limit: int, resource_id: UUID | None = None) -> list[ExecutionTargetRead]:
+    async def targets(
+        self,
+        limit: int,
+        resource_id: UUID | None = None,
+        *,
+        cursor: str | None = None,
+    ) -> list[ExecutionTargetRead]:
         """Authorize targets through ownership of their physical cluster."""
         statement = select(ExecutionTarget).join(Cluster).where(col(Cluster.source_client_id) == self._client_id)
         if resource_id is not None:
             statement = statement.where(col(ExecutionTarget.id) == resource_id)
+
+        if cursor:
+            c = decode_cursor(cursor)
+            anchor_ts = datetime.fromisoformat(c["created_at"])
+            anchor_id = UUID(c["id"])
+            if c.get("direction") == "prev":
+                statement = statement.where(
+                    (col(ExecutionTarget.created_at) < anchor_ts)
+                    | (
+                        (col(ExecutionTarget.created_at) == anchor_ts)
+                        & (col(ExecutionTarget.id) < anchor_id)
+                    )
+                ).order_by(col(ExecutionTarget.created_at).desc(), col(ExecutionTarget.id).desc())
+            else:
+                statement = statement.where(
+                    (col(ExecutionTarget.created_at) > anchor_ts)
+                    | (
+                        (col(ExecutionTarget.created_at) == anchor_ts)
+                        & (col(ExecutionTarget.id) > anchor_id)
+                    )
+                ).order_by(col(ExecutionTarget.created_at).asc(), col(ExecutionTarget.id).asc())
+        else:
+            statement = statement.order_by(col(ExecutionTarget.created_at).asc(), col(ExecutionTarget.id).asc())
+
         async with self._sessions() as session:
-            rows = await session.scalars(
-                statement.order_by(col(ExecutionTarget.created_at), col(ExecutionTarget.id)).limit(limit)
-            )
-            return [ExecutionTargetRead.model_validate(row) for row in rows]
+            rows = list(await session.scalars(statement.limit(limit)))
+        if cursor and decode_cursor(cursor).get("direction") == "prev":
+            rows = list(reversed(rows))
+        return [ExecutionTargetRead.model_validate(row) for row in rows]
 
     async def target(self, resource_id: UUID) -> ExecutionTargetRead:
         """Use the same not-found response for absent and other-client targets."""
@@ -83,3 +165,14 @@ class EPResourceQueries:
         if not rows:
             raise ResourceNotFoundError
         return rows[0]
+
+    async def count_targets(self) -> int:
+        """Return total execution target count for the authenticated client."""
+        async with self._sessions() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(ExecutionTarget)
+                .join(Cluster)
+                .where(col(Cluster.source_client_id) == self._client_id)
+            )
+            return result.scalar_one()
