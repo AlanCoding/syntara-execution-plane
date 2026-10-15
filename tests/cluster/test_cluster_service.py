@@ -295,7 +295,7 @@ class _ClusterStore:
     async def finalize_delete(self, _cluster_id: uuid.UUID) -> None:
         self.finalized = True
 
-    async def list_bindings_for_client(self, client_id: str, *, limit: int) -> Sequence[ClusterBinding]:
+    async def list_bindings_for_client(self, client_id: str, *, limit: int, **_: object) -> Sequence[ClusterBinding]:
         self.binding_queries.append((client_id, limit))
         return [self.binding]
 

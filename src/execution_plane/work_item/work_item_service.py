@@ -50,9 +50,23 @@ class WorkItemService:
         """Return the durable completion event for terminal work."""
         return await self._store.get_completion_event(work_item_id)
 
-    async def list_for_client(self, *, client_id: str, limit: int) -> list[WorkItem]:
+    async def list_for_client(
+        self,
+        *,
+        client_id: str,
+        limit: int,
+        cursor: dict[str, Any] | None = None,
+        sort_field: str = "created_at",
+        sort_direction: str = "desc",
+    ) -> list[WorkItem]:
         """Return bounded work owned by the authenticated client."""
-        return await self._store.list_for_client(client_id=client_id, limit=limit)
+        return await self._store.list_for_client(
+            client_id=client_id, limit=limit, cursor=cursor, sort_field=sort_field, sort_direction=sort_direction
+        )
+
+    async def count_for_client(self, *, client_id: str) -> int:
+        """Return the number of work items owned by the authenticated client."""
+        return await self._store.count_for_client(client_id=client_id)
 
     async def reserve_one(self) -> WorkItem | None:
         """Reserve one queued or recoverable work item."""
