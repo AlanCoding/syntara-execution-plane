@@ -29,6 +29,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransportReceipt'
+        '422':
+          description: Invalid or unsupported command
       security:
       - HTTPBearer: []
       requestBody:
@@ -85,11 +87,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourcesResponse_WorkItemRead_'
         '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+          description: Invalid query parameters or cursor
   /v1/work-items/{resource_id}:
     get:
       summary: Work Item
@@ -165,11 +163,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourcesResponse_ClusterRead_'
         '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+          description: Invalid query parameters or cursor
   /v1/clusters/{resource_id}:
     get:
       summary: Cluster
@@ -245,11 +239,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourcesResponse_ExecutionTargetRead_'
         '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+          description: Invalid query parameters or cursor
   /v1/execution-targets/{resource_id}:
     get:
       summary: Target
