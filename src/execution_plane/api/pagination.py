@@ -69,25 +69,29 @@ def generate_response(
     next_cursor = None
     if has_more and trimmed:
         last = trimmed[-1]
-        next_cursor = encode_cursor({
-            "id": str(last.id),
-            "created_at": last.created_at.isoformat(),
-            "direction": "next",
-            "sort_field": sort_field,
-            "sort_direction": sort_direction,
-            "sort_value": getattr(last, sort_field).isoformat(),
-        })
+        next_cursor = encode_cursor(
+            {
+                "id": str(last.id),
+                "created_at": last.created_at.isoformat(),
+                "direction": "next",
+                "sort_field": sort_field,
+                "sort_direction": sort_direction,
+                "sort_value": getattr(last, sort_field).isoformat(),
+            }
+        )
 
     prev_cursor = None
     if cursor and trimmed:
         first = trimmed[0]
-        prev_cursor = encode_cursor({
-            "id": str(first.id),
-            "created_at": first.created_at.isoformat(),
-            "direction": "prev",
-            "sort_field": sort_field,
-            "sort_direction": sort_direction,
-            "sort_value": getattr(first, sort_field).isoformat(),
-        })
+        prev_cursor = encode_cursor(
+            {
+                "id": str(first.id),
+                "created_at": first.created_at.isoformat(),
+                "direction": "prev",
+                "sort_field": sort_field,
+                "sort_direction": sort_direction,
+                "sort_value": getattr(first, sort_field).isoformat(),
+            }
+        )
 
     return trimmed, next_cursor, prev_cursor

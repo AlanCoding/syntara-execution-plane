@@ -29,9 +29,7 @@ class EPResourceQueries:
     async def work_items(self, limit: int, *, cursor: str | None = None) -> list[WorkItemRead]:
         """List work without embedding potentially large results."""
         parsed_cursor = decode_cursor(cursor) if cursor else None
-        items = await self._work.list_for_client(
-            client_id=self._client_id, limit=limit, cursor=parsed_cursor
-        )
+        items = await self._work.list_for_client(client_id=self._client_id, limit=limit, cursor=parsed_cursor)
         if parsed_cursor and parsed_cursor.get("direction") == "prev":
             items.reverse()
         return [
@@ -104,9 +102,7 @@ class EPResourceQueries:
         """Return total cluster count for the authenticated client."""
         async with self._sessions() as session:
             result = await session.execute(
-                select(func.count())
-                .select_from(ClusterBinding)
-                .where(col(ClusterBinding.client_id) == self._client_id)
+                select(func.count()).select_from(ClusterBinding).where(col(ClusterBinding.client_id) == self._client_id)
             )
             return result.scalar_one()
 
@@ -137,18 +133,12 @@ class EPResourceQueries:
             if c.get("direction") == "prev":
                 statement = statement.where(
                     (col(ExecutionTarget.created_at) < anchor_ts)
-                    | (
-                        (col(ExecutionTarget.created_at) == anchor_ts)
-                        & (col(ExecutionTarget.id) < anchor_id)
-                    )
+                    | ((col(ExecutionTarget.created_at) == anchor_ts) & (col(ExecutionTarget.id) < anchor_id))
                 ).order_by(col(ExecutionTarget.created_at).desc(), col(ExecutionTarget.id).desc())
             else:
                 statement = statement.where(
                     (col(ExecutionTarget.created_at) > anchor_ts)
-                    | (
-                        (col(ExecutionTarget.created_at) == anchor_ts)
-                        & (col(ExecutionTarget.id) > anchor_id)
-                    )
+                    | ((col(ExecutionTarget.created_at) == anchor_ts) & (col(ExecutionTarget.id) > anchor_id))
                 ).order_by(col(ExecutionTarget.created_at).asc(), col(ExecutionTarget.id).asc())
         else:
             statement = statement.order_by(col(ExecutionTarget.created_at).asc(), col(ExecutionTarget.id).asc())
