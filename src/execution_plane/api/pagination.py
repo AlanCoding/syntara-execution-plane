@@ -18,7 +18,10 @@ _CURSOR_NOT_OBJECT = "cursor must be a JSON object"
 
 
 class EPListParams(BaseModel):
-    """Query parameters accepted by all EP list endpoints."""
+    """Query parameters accepted by all EP list endpoints.
+
+    Mirrors syntara.core.models.base.query_params.BaseListParams.
+    """
 
     limit: int = Field(default=20, gt=0, le=100)
     cursor: str | None = Field(default=None)
@@ -28,7 +31,11 @@ class EPListParams(BaseModel):
 
 
 class ResourcesResponse(BaseModel, Generic[T]):  # noqa: UP046
-    """Pagination envelope returned by all EP list endpoints."""
+    """Pagination envelope returned by all EP list endpoints.
+
+    Simplified from syntara.core.models.pagination.ResourcesResponse /
+    ResourcesResponseBase (drops ConfigDict extras; keeps the same four fields).
+    """
 
     resources: list[T]
     next: str | None = None
@@ -39,7 +46,7 @@ class ResourcesResponse(BaseModel, Generic[T]):  # noqa: UP046
 def serialize_sort_value(value: Any) -> str:  # noqa: ANN401
     """Serialize a sort column value to a string for cursor storage.
 
-    Mirrors AO's serialize_sort_value; handles datetime, UUID, bool, int, str, None.
+    Copied from syntara.core.utils.cursor.serialize_sort_value.
     """
     if value is None:
         return ""
@@ -53,12 +60,20 @@ def serialize_sort_value(value: Any) -> str:  # noqa: ANN401
 
 
 def encode_cursor(data: dict[str, Any]) -> str:
-    """Encode a cursor dict to an opaque base64-JSON token."""
+    """Encode a cursor dict to an opaque base64-JSON token.
+
+    Simplified from syntara.core.utils.cursor.encode_cursor (plain dict instead
+    of CursorData TypedDict; otherwise identical).
+    """
     return base64.b64encode(json.dumps(data, sort_keys=True).encode()).decode()
 
 
 def decode_cursor(token: str) -> dict[str, Any]:
-    """Decode and whitelist-filter a cursor token; raise ValueError on invalid input."""
+    """Decode and whitelist-filter a cursor token; raise ValueError on invalid input.
+
+    Simplified from syntara.core.utils.cursor.decode_cursor (single size check,
+    dict-comprehension whitelist instead of typed _filter_to_cursor_data).
+    """
     if len(token.encode()) > MAX_CURSOR_BYTES:
         msg = "cursor too large"
         raise ValueError(msg)
@@ -81,7 +96,12 @@ def generate_response(
     sort_field: str = "created_at",
     sort_direction: str = "asc",
 ) -> tuple[list[Any], str | None, str | None]:
-    """Return (trimmed_items, next_cursor, prev_cursor)."""
+    """Return (trimmed_items, next_cursor, prev_cursor).
+
+    Derived from syntara.core.utils.pagination.generate_response; drops the
+    is_first_page flag, sort_value_fn callback, and backward-pagination
+    asymmetric trim — EP only supports forward navigation via next cursors.
+    """
     has_more = len(items) > limit
     trimmed = items[:limit]
 
