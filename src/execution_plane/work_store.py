@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
@@ -96,14 +96,14 @@ class WorkStore(StoreBase):
         *,
         client_id: str,
         limit: int,
-        cursor: dict | None = None,
+        cursor: dict[str, Any] | None = None,
     ) -> list[WorkItem]:
         """Return bounded work for the authenticated client."""
         statement = select(WorkItem).where(col(WorkItem.client_id) == client_id)
 
         if cursor:
-            anchor_ts = datetime.fromisoformat(cursor["created_at"])
-            anchor_id = uuid.UUID(cursor["id"])
+            anchor_ts = datetime.fromisoformat(cast("str", cursor["created_at"]))
+            anchor_id = uuid.UUID(cast("str", cursor["id"]))
             if cursor.get("direction") == "prev":
                 # Going backwards in time (toward newer items) from a DESC anchor
                 statement = statement.where(

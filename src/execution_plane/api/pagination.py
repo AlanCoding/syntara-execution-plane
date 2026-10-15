@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Annotated, Generic, TypeVar
+from typing import Annotated, Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -33,12 +33,12 @@ class ResourcesResponse(BaseModel, Generic[T]):  # noqa: UP046
     total: int | None = None
 
 
-def encode_cursor(data: dict) -> str:
+def encode_cursor(data: dict[str, Any]) -> str:
     """Encode a cursor dict to an opaque base64-JSON token."""
     return base64.b64encode(json.dumps(data, sort_keys=True).encode()).decode()
 
 
-def decode_cursor(token: str) -> dict:
+def decode_cursor(token: str) -> dict[str, Any]:
     """Decode and whitelist-filter a cursor token; raise ValueError on invalid input."""
     if len(token.encode()) > MAX_CURSOR_BYTES:
         msg = "cursor too large"
@@ -55,13 +55,13 @@ def decode_cursor(token: str) -> dict:
 
 
 def generate_response(
-    items: list,
+    items: list[Any],
     limit: int,
     cursor: str | None,
     *,
     sort_field: str = "created_at",
     sort_direction: str = "asc",
-) -> tuple[list, str | None, str | None]:
+) -> tuple[list[Any], str | None, str | None]:
     """Return (trimmed_items, next_cursor, prev_cursor)."""
     has_more = len(items) > limit
     trimmed = items[:limit]
