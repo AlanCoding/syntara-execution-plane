@@ -166,7 +166,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
             raw = await queries.work_items(
-                params.limit + 1,
+                params.limit,
                 cursor=params.cursor,
                 sort_field=sort_field,
                 sort_direction=sort_direction,
@@ -195,7 +195,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     ) -> ResourcesResponse[ClusterRead]:
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
-            raw = await queries.clusters(params.limit + 1, cursor=params.cursor)
+            raw = await queries.clusters(params.limit, cursor=params.cursor)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         trimmed, next_cur, prev_cur = generate_response(
@@ -220,7 +220,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     ) -> ResourcesResponse[ExecutionTargetRead]:
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
-            raw = await queries.targets(params.limit + 1, cursor=params.cursor)
+            raw = await queries.targets(params.limit, cursor=params.cursor)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         trimmed, next_cur, prev_cur = generate_response(

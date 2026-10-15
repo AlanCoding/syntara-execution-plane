@@ -38,7 +38,7 @@ class EPResourceQueries:
         parsed_cursor = decode_cursor(cursor) if cursor else None
         items = await self._work.list_for_client(
             client_id=self._client_id,
-            limit=limit,
+            limit=limit + 1,
             cursor=parsed_cursor,
             sort_field=sort_field,
             sort_direction=sort_direction,
@@ -106,7 +106,7 @@ class EPResourceQueries:
             )
 
         async with self._sessions() as session:
-            rows = list(await session.scalars(statement.limit(limit)))
+            rows = list(await session.scalars(statement.limit(limit + 1)))
         if cursor and decode_cursor(cursor).get("direction") == "prev":
             rows.reverse()
         return [ClusterRead.model_validate(row) for row in rows]
@@ -157,7 +157,7 @@ class EPResourceQueries:
             statement = statement.order_by(col(ExecutionTarget.created_at).asc(), col(ExecutionTarget.id).asc())
 
         async with self._sessions() as session:
-            rows = list(await session.scalars(statement.limit(limit)))
+            rows = list(await session.scalars(statement.limit(limit + 1)))
         if cursor and decode_cursor(cursor).get("direction") == "prev":
             rows.reverse()
         return [ExecutionTargetRead.model_validate(row) for row in rows]
