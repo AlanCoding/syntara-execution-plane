@@ -27,6 +27,24 @@ if TYPE_CHECKING:
 
 _NOTIFY_CHANNEL = "execution_plane_work_items"
 
+_WORK_ITEM_SORT_COLS: dict[str, Any] = {
+    "created_at": WorkItem.created_at,
+    "status": WorkItem.status,
+    "resource_cleanup_status": WorkItem.resource_cleanup_status,
+    "id": WorkItem.id,
+    "completed_at": WorkItem.completed_at,
+    "claimed_at": WorkItem.claimed_at,
+}
+
+
+def _parse_sort_value(field: str, value: str) -> Any:  # noqa: ANN401
+    """Convert a cursor's string sort_value back to the column's native Python type."""
+    if field in {"created_at", "claimed_at", "completed_at"}:
+        return datetime.fromisoformat(value)
+    if field == "id":
+        return uuid.UUID(value)
+    return value
+
 
 class WorkItemNotFoundError(LookupError):
     """Raised when a lifecycle transition targets an unknown work item."""
@@ -97,27 +115,46 @@ class WorkStore(StoreBase):
         client_id: str,
         limit: int,
         cursor: dict[str, Any] | None = None,
+        sort_field: str = "created_at",
+        sort_direction: str = "desc",
     ) -> list[WorkItem]:
         """Return bounded work for the authenticated client."""
+        if sort_field not in _WORK_ITEM_SORT_COLS:
+            msg = f"Invalid sort field for work items: {sort_field}"
+            raise ValueError(msg)
+
+        sort_col = col(_WORK_ITEM_SORT_COLS[sort_field])
+        id_col = col(WorkItem.id)
+        asc_dir = sort_direction == "asc"
         statement = select(WorkItem).where(col(WorkItem.client_id) == client_id)
 
         if cursor:
-            anchor_ts = datetime.fromisoformat(cast("str", cursor["created_at"]))
             anchor_id = uuid.UUID(cast("str", cursor["id"]))
-            if cursor.get("direction") == "prev":
-                # Going backwards in time (toward newer items) from a DESC anchor
+            sort_value_str = cast("str", cursor.get("sort_value") or cursor.get("created_at", ""))
+            anchor_val = _parse_sort_value(sort_field, sort_value_str)
+            going_backward = cursor.get("direction") == "prev"
+
+            if going_backward:
+                if asc_dir:
+                    statement = statement.where(
+                        (sort_col < anchor_val) | ((sort_col == anchor_val) & (id_col < anchor_id))
+                    ).order_by(sort_col.desc(), id_col.desc())
+                else:
+                    statement = statement.where(
+                        (sort_col > anchor_val) | ((sort_col == anchor_val) & (id_col > anchor_id))
+                    ).order_by(sort_col.asc(), id_col.asc())
+            elif asc_dir:
                 statement = statement.where(
-                    (col(WorkItem.created_at) > anchor_ts)
-                    | ((col(WorkItem.created_at) == anchor_ts) & (col(WorkItem.id) > anchor_id))
-                ).order_by(col(WorkItem.created_at).asc(), col(WorkItem.id).asc())
+                    (sort_col > anchor_val) | ((sort_col == anchor_val) & (id_col > anchor_id))
+                ).order_by(sort_col.asc(), id_col.asc())
             else:
-                # Going forward (toward older items) in DESC sort
                 statement = statement.where(
-                    (col(WorkItem.created_at) < anchor_ts)
-                    | ((col(WorkItem.created_at) == anchor_ts) & (col(WorkItem.id) < anchor_id))
-                ).order_by(col(WorkItem.created_at).desc(), col(WorkItem.id).desc())
+                    (sort_col < anchor_val) | ((sort_col == anchor_val) & (id_col < anchor_id))
+                ).order_by(sort_col.desc(), id_col.desc())
+        elif asc_dir:
+            statement = statement.order_by(sort_col.asc(), id_col.asc())
         else:
-            statement = statement.order_by(col(WorkItem.created_at).desc(), col(WorkItem.id).desc())
+            statement = statement.order_by(sort_col.desc(), id_col.desc())
 
         async with self._session_context() as session:
             result = await session.execute(statement.limit(limit))

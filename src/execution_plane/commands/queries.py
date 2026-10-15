@@ -26,10 +26,23 @@ class EPResourceQueries:
         self._work = WorkStore.from_engine(engine)
         self._client_id = client_id
 
-    async def work_items(self, limit: int, *, cursor: str | None = None) -> list[WorkItemRead]:
+    async def work_items(
+        self,
+        limit: int,
+        *,
+        cursor: str | None = None,
+        sort_field: str = "created_at",
+        sort_direction: str = "desc",
+    ) -> list[WorkItemRead]:
         """List work without embedding potentially large results."""
         parsed_cursor = decode_cursor(cursor) if cursor else None
-        items = await self._work.list_for_client(client_id=self._client_id, limit=limit, cursor=parsed_cursor)
+        items = await self._work.list_for_client(
+            client_id=self._client_id,
+            limit=limit,
+            cursor=parsed_cursor,
+            sort_field=sort_field,
+            sort_direction=sort_direction,
+        )
         if parsed_cursor and parsed_cursor.get("direction") == "prev":
             items.reverse()
         return [

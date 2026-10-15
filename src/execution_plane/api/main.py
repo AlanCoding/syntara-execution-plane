@@ -158,13 +158,23 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         identity: Annotated[ServiceIdentity, Depends(require_scope("work-items:read"))],
         params: Annotated[EPListParams, Query()],
     ) -> ResourcesResponse[WorkItemRead]:
+        sort_raw = params.sort or "-created_at"
+        if sort_raw.startswith("-"):
+            sort_field, sort_direction = sort_raw[1:], "desc"
+        else:
+            sort_field, sort_direction = sort_raw, "asc"
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
-            raw = await queries.work_items(params.limit + 1, cursor=params.cursor)
+            raw = await queries.work_items(
+                params.limit + 1,
+                cursor=params.cursor,
+                sort_field=sort_field,
+                sort_direction=sort_direction,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         trimmed, next_cur, prev_cur = generate_response(
-            raw, params.limit, params.cursor, sort_field="created_at", sort_direction="desc"
+            raw, params.limit, params.cursor, sort_field=sort_field, sort_direction=sort_direction
         )
         total = await queries.count_work_items() if params.include_total else None
         return ResourcesResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)
