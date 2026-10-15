@@ -28,12 +28,12 @@ def _apply_created_at_cursor(
     anchor_ts = datetime.fromisoformat(cursor["created_at"])
     anchor_id = UUID(cursor["id"])
     if cursor.get("direction") == "prev":
-        return statement.where(
-            (ts_col < anchor_ts) | ((ts_col == anchor_ts) & (id_col < anchor_id))
-        ).order_by(ts_col.desc(), id_col.desc())
-    return statement.where(
-        (ts_col > anchor_ts) | ((ts_col == anchor_ts) & (id_col > anchor_id))
-    ).order_by(ts_col.asc(), id_col.asc())
+        return statement.where((ts_col < anchor_ts) | ((ts_col == anchor_ts) & (id_col < anchor_id))).order_by(
+            ts_col.desc(), id_col.desc()
+        )
+    return statement.where((ts_col > anchor_ts) | ((ts_col == anchor_ts) & (id_col > anchor_id))).order_by(
+        ts_col.asc(), id_col.asc()
+    )
 
 
 class EPResourceQueries:

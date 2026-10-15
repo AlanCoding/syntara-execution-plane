@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 _NOTIFY_CHANNEL = "execution_plane_work_items"
 
+
 def _parse_sort_value(field: str, value: str) -> Any:  # noqa: ANN401
     """Convert a cursor's string sort_value back to the column's native Python type."""
     if field in {"created_at", "claimed_at", "completed_at"}:

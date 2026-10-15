@@ -332,6 +332,7 @@ async def _insert_cluster_and_targets(sessions, client_id: str, count: int) -> t
 
 # Helpers for sort tests
 
+
 async def _all_items(client, sort: str, limit: int = 100) -> list[dict]:
     response = await client.get("/v1/work-items", params={"limit": limit, "sort": sort})
     assert response.status_code == 200, response.text
@@ -482,8 +483,8 @@ async def test_sort_status_asc_order(sort_client):
     statuses = [item["status"] for item in items]
     assert statuses == sorted(statuses)
     assert all(s == "completed" for s in statuses[:_ITEMS_PER_GROUP])
-    assert all(s == "failed" for s in statuses[_ITEMS_PER_GROUP:_ITEMS_PER_GROUP * 2])
-    assert all(s == "pending" for s in statuses[_ITEMS_PER_GROUP * 2:])
+    assert all(s == "failed" for s in statuses[_ITEMS_PER_GROUP : _ITEMS_PER_GROUP * 2])
+    assert all(s == "pending" for s in statuses[_ITEMS_PER_GROUP * 2 :])
 
 
 async def test_sort_status_asc_pagination_covers_all_items(sort_client):
@@ -509,8 +510,8 @@ async def test_sort_resource_cleanup_status_asc(sort_client):
     assert len(items) == _TOTAL_SORT_ITEMS
     cleanup_statuses = [item["resource_cleanup_status"] for item in items]
     assert cleanup_statuses == sorted(cleanup_statuses)
-    assert all(s == "done" for s in cleanup_statuses[:_ITEMS_PER_GROUP * 2])
-    assert all(s == "pending" for s in cleanup_statuses[_ITEMS_PER_GROUP * 2:])
+    assert all(s == "done" for s in cleanup_statuses[: _ITEMS_PER_GROUP * 2])
+    assert all(s == "pending" for s in cleanup_statuses[_ITEMS_PER_GROUP * 2 :])
 
 
 # =============================================================================
