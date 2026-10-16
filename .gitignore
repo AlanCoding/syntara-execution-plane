@@ -16,6 +16,11 @@ htmlcov/
 .scannerwork/
 .env
 .secrets/
+hermeto-output/
+hermeto.env
+Containerfile.hermetic
+tmp_hermeto_conf
+requirements.txt.bak
 .worktrees/
 .vscode/
 .remember/
