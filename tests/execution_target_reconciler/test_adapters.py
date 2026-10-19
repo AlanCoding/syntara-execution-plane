@@ -1,4 +1,4 @@
-"""Store-backed snapshot adapters."""
+"""Registry-aware snapshot adapters."""
 
 from __future__ import annotations
 
@@ -8,17 +8,19 @@ from typing import TYPE_CHECKING, Self, cast
 
 import pytest
 
+from execution_plane.cluster.cluster_service import ClusterService, NoopDiscoveryMechanism
 from execution_plane.cluster.cluster_store import ClusterStore
+from execution_plane.execution_target.execution_target_service import ExecutionTargetService
 from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
 from execution_plane.execution_target_reconciler.adapters import (
-    ExecutionTargetStoreAdapter,
+    ExecutionTargetSnapshotSourceAdapter,
     build_placement_resolver,
     cluster_snapshot_from_model,
     execution_target_snapshot_from_model,
-    store_backed_target_registry,
+    service_backed_snapshot_source,
 )
 from execution_plane.execution_target_reconciler.placement import PlacementResolver
-from execution_plane.execution_target_reconciler.protocols import ExecutionTargetRegistry
+from execution_plane.execution_target_reconciler.protocols import ExecutionTargetSnapshotSource
 from execution_plane.execution_target_reconciler.types import WorkRequirements
 from execution_plane.models.cluster import Cluster, ClusterStatus, ClusterType
 from execution_plane.models.execution_target import BackendType, ExecutionTarget, TargetStatus
@@ -96,12 +98,17 @@ class _Session:
         return self._result
 
 
-def _cluster_store(clusters: list[Cluster]) -> ClusterStore:
-    return ClusterStore.from_session(cast("AsyncSession", _Session(clusters)))
+def _cluster_service(clusters: list[Cluster]) -> ClusterService:
+    store = ClusterStore.from_session(cast("AsyncSession", _Session(clusters)))
+    return ClusterService(
+        store,
+        ExecutionTargetService(ExecutionTargetStore.from_session(cast("AsyncSession", _Session([])))),
+        NoopDiscoveryMechanism(),
+    )
 
 
-def _target_store(targets: list[ExecutionTarget]) -> ExecutionTargetStore:
-    return ExecutionTargetStore.from_session(cast("AsyncSession", _Session(targets)))
+def _target_service(targets: list[ExecutionTarget]) -> ExecutionTargetService:
+    return ExecutionTargetService(ExecutionTargetStore.from_session(cast("AsyncSession", _Session(targets))))
 
 
 def test_cluster_snapshot_maps_non_active_to_disabled() -> None:
@@ -127,18 +134,18 @@ def test_execution_target_snapshot_shares_cluster_and_maps_enums() -> None:
     assert target.is_default is True
 
 
-def test_store_adapter_inherits_target_registry_protocol() -> None:
-    assert ExecutionTargetRegistry in ExecutionTargetStoreAdapter.__mro__
+def test_snapshot_source_adapter_inherits_snapshot_source_protocol() -> None:
+    assert ExecutionTargetSnapshotSource in ExecutionTargetSnapshotSourceAdapter.__mro__
 
 
 @pytest.mark.asyncio
-async def test_store_backed_registry_interns_cluster_snapshots() -> None:
+async def test_service_backed_snapshot_source_interns_cluster_snapshots() -> None:
     cluster = _cluster()
     first = _target(cluster)
     second = _target(cluster, name="ep-gpu", is_default=False)
-    registry = store_backed_target_registry(_cluster_store([cluster]), _target_store([first, second]))
+    source = service_backed_snapshot_source(_cluster_service([cluster]), _target_service([first, second]))
 
-    listed = await registry.list()
+    listed = await source.list()
 
     assert len(listed) == 2
     assert listed[0].cluster is listed[1].cluster
@@ -148,18 +155,18 @@ async def test_store_backed_registry_interns_cluster_snapshots() -> None:
 
 
 @pytest.mark.asyncio
-async def test_store_backed_registry_omits_targets_without_a_cluster() -> None:
+async def test_service_backed_snapshot_source_omits_targets_without_a_cluster() -> None:
     cluster = _cluster()
     orphan = _target(_cluster())
-    registry = store_backed_target_registry(_cluster_store([cluster]), _target_store([orphan]))
+    source = service_backed_snapshot_source(_cluster_service([cluster]), _target_service([orphan]))
 
-    assert await registry.list() == ()
+    assert await source.list() == ()
 
 
 @pytest.mark.asyncio
 async def test_build_placement_resolver_returns_placement_facade() -> None:
     cluster = _cluster()
-    resolver = build_placement_resolver(_cluster_store([cluster]), _target_store([_target(cluster)]))
+    resolver = build_placement_resolver(_cluster_service([cluster]), _target_service([_target(cluster)]))
     assert isinstance(resolver, PlacementResolver)
     result = await resolver.resolve(WorkRequirements())
     assert result.available_targets[0].name == "ep-default"

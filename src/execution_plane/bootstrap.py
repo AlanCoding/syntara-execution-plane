@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
-from execution_plane.cluster.cluster_registry import (
+from execution_plane.cluster.cluster_service import (
     ClusterRegistration,
-    ClusterRegistry,
+    ClusterService,
     DiscoveredExecutionTarget,
     DiscoveryMechanism,
     DiscoveryResult,
 )
 from execution_plane.cluster.cluster_store import ClusterStore
-from execution_plane.execution_target.execution_target_registry import ExecutionTargetRegistry
+from execution_plane.execution_target.execution_target_service import ExecutionTargetService
 from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
 from execution_plane.models.cluster import Cluster, ClusterStatus, ClusterType
 from execution_plane.models.execution_target import BackendType, ExecutionTarget, TargetStatus
@@ -25,6 +26,9 @@ LOCAL_TARGET_ENDPOINT = "local://execution-plane/default"
 LOCAL_TARGET_NAMESPACE = "execution"
 LOCAL_API_KEY = "local-execution-plane"
 BOOTSTRAP_ACTOR_ID = uuid.UUID(int=0)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class LocalClusterBootstrapError(RuntimeError):
@@ -64,29 +68,29 @@ async def bootstrap_local_cluster(
         ClusterStore.from_database_url(database_url) as cluster_store,
         ExecutionTargetStore.from_database_url(database_url) as target_store,
     ):
-        target_registry = ExecutionTargetRegistry(target_store)
-        cluster_registry = ClusterRegistry(cluster_store, target_registry, discovery)
-        clusters = await cluster_registry.list()
+        target_service = ExecutionTargetService(target_store)
+        cluster_service = ClusterService(cluster_store, target_service, discovery)
+        clusters = await cluster_service.list()
         for candidate in clusters:
-            targets = await target_registry.list(cluster_id=candidate.id)
+            targets = await target_service.list(cluster_id=candidate.id)
             if _is_healthy(candidate, targets):
                 return candidate
 
         cluster = next((candidate for candidate in clusters if candidate.endpoint == LOCAL_CLUSTER_ENDPOINT), None)
         if cluster is None:
-            cluster = await cluster_registry.register(
+            cluster = await cluster_service.register(
                 LOCAL_CLUSTER_NAME,
                 LOCAL_CLUSTER_ENDPOINT,
                 LOCAL_API_KEY,
                 created_by,
                 cluster_type=ClusterType.OPENSHIFT,
             )
-            targets = await target_registry.list(cluster_id=cluster.id)
+            targets = await target_service.list(cluster_id=cluster.id)
             if _is_healthy(cluster, targets):
                 return cluster
             raise LocalClusterBootstrapError(cluster.status)
 
-        targets = await target_registry.list(cluster_id=cluster.id)
+        targets = await target_service.list(cluster_id=cluster.id)
         if _is_healthy(cluster, targets):
             return cluster
         if targets or not cluster.enabled or cluster.status is not ClusterStatus.REGISTERING:
@@ -94,7 +98,7 @@ async def bootstrap_local_cluster(
 
         result = discovery.discover(ClusterRegistration(LOCAL_CLUSTER_NAME, LOCAL_CLUSTER_ENDPOINT, "", {}))
         target = result.targets[0]
-        created_target = await target_registry.create(
+        created_target = await target_service.create(
             cluster_id=cluster.id,
             name=target.name,
             backend_type=target.backend_type,
@@ -104,8 +108,8 @@ async def bootstrap_local_cluster(
             is_default=target.is_default,
             created_by=created_by,
         )
-        await target_registry.activate(created_target.id, created_by)
-        return await cluster_store.record_discovery_state(
+        await target_service.activate(created_target.id, created_by)
+        return await cluster_service.record_discovery_state(
             cluster.id,
             ClusterStatus.ACTIVE,
             None,
@@ -113,7 +117,7 @@ async def bootstrap_local_cluster(
         )
 
 
-def _is_healthy(cluster: Cluster, targets: list[ExecutionTarget]) -> bool:
+def _is_healthy(cluster: Cluster, targets: Sequence[ExecutionTarget]) -> bool:
     """Return whether a Cluster has one usable default target."""
     defaults = [target for target in targets if target.is_default]
     return (

@@ -30,7 +30,7 @@ from execution_plane.execution_target.execution_target_store import (
     ClusterNotAvailableError,
     DefaultExecutionTargetError,
 )
-from execution_plane.work_store import DuplicateWorkItemError, WorkItemNotFoundError
+from execution_plane.work_item.errors import DuplicateWorkItemError, WorkItemNotFoundError
 from execution_plane_client.catalog import CommandCatalog
 from execution_plane_client.errors import ProtocolConflict, UnsupportedCommand
 from execution_plane_client.protocol import CapabilitiesRead, MessageEnvelope, TransportReceipt

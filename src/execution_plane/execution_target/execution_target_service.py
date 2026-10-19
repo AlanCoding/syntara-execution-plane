@@ -11,13 +11,14 @@ from execution_plane.execution_target.execution_target_store import (
 
 if TYPE_CHECKING:
     import uuid
+    from collections.abc import Sequence
 
     from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
     from execution_plane.models.execution_target import BackendType, ExecutionTarget, TargetStatus
     from execution_plane.models.execution_target_placement import ExecutionTargetPlacement
 
 
-class ExecutionTargetRegistry:
+class ExecutionTargetService:
     """Enforce execution-target domain rules without owning a database session."""
 
     def __init__(self, store: ExecutionTargetStore) -> None:
@@ -35,6 +36,8 @@ class ExecutionTargetRegistry:
         created_by: uuid.UUID,
         placement: ExecutionTargetPlacement,
         labels: dict[str, str] | None = None,
+        *,
+        target_id: uuid.UUID | None = None,
     ) -> ExecutionTarget:
         """Create an execution target through the persistence boundary."""
         return await self._store.create(
@@ -47,11 +50,12 @@ class ExecutionTargetRegistry:
             created_by,
             labels=labels,
             placement=placement,
+            target_id=target_id,
         )
 
-    async def get(self, target_id: uuid.UUID) -> ExecutionTarget | None:
+    async def get(self, target_id: uuid.UUID, *, include_secret: bool = False) -> ExecutionTarget | None:
         """Return a target by ID, if it exists."""
-        return await self._store.get(target_id)
+        return await self._store.get(target_id, include_secret=include_secret)
 
     async def list(
         self,
@@ -59,7 +63,7 @@ class ExecutionTargetRegistry:
         eligible_only: bool = False,  # noqa: FBT001, FBT002
         status: TargetStatus | None = None,
         limit: int | None = None,
-    ) -> list[ExecutionTarget]:
+    ) -> Sequence[ExecutionTarget]:
         """List targets, optionally restricted to those eligible for new work."""
         return await self._store.list(
             cluster_id=cluster_id,
@@ -67,6 +71,16 @@ class ExecutionTargetRegistry:
             status=status,
             limit=limit,
         )
+
+    async def list_for_client(
+        self,
+        client_id: str,
+        *,
+        limit: int,
+        target_id: uuid.UUID | None = None,
+    ) -> Sequence[ExecutionTarget]:
+        """List targets owned by clusters belonging to one service client."""
+        return await self._store.list_for_client(client_id, limit=limit, target_id=target_id)
 
     async def request_delete(self, target_id: uuid.UUID, updated_by: uuid.UUID) -> ExecutionTarget:
         """Disable a non-default target and mark it as DRAINING."""
@@ -118,6 +132,14 @@ class ExecutionTargetRegistry:
             api_key=api_key,
             placement=placement,
         )
+
+    async def mark_failed(self, target_id: uuid.UUID, updated_by: uuid.UUID) -> ExecutionTarget:
+        """Record an irrecoverable target drain failure."""
+        return await self._store.mark_failed(target_id, updated_by)
+
+    async def finalize_delete(self, target_id: uuid.UUID) -> None:
+        """Delete a drained target when finalization is safe."""
+        await self._store.finalize_delete(target_id)
 
     async def _require_non_default(self, target_id: uuid.UUID) -> ExecutionTarget:
         """Return a target only if it is not the protected default target."""
