@@ -45,9 +45,7 @@ class _DrainMonitor:
 
 
 class _ResourceMonitor:
-    def __init__(
-        self, _target_service: object, _cluster_service: object, _settings: object, events: list[str]
-    ) -> None:
+    def __init__(self, _target_service: object, _cluster_service: object, _settings: object, events: list[str]) -> None:
         self.events = events
 
     async def start(self) -> None:
