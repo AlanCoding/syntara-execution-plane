@@ -206,8 +206,8 @@ This client factory is intentionally shared: the vanilla Kubernetes Worker
 Manager will need the same construction from Cluster credentials. Do not bury
 it inside the probe as a private helper that the Worker Manager cannot import.
 
-`ClusterStore.get()` currently redacts `api_key`. The monitor loop needs
-`include_secret=True` (same pattern as `ExecutionTargetStore.get`).
+`ClusterStore.get()` redacts `api_key`. The monitor loop should use the explicit
+credential-read capability (for example `ClusterCredentialStore.get_with_credentials`).
 
 #### TLS
 
@@ -286,7 +286,7 @@ Until AAP-92722 lands, producing `HEALTH` is still the correct filter contract.
 ## Implementation order
 
 1. This document (the contract reviewers hold the code to).
-2. Store: `include_secret` on Cluster reads used by the monitor; `record_health`
+2. Store: an explicit Cluster credential read used by the monitor; `record_health`
    with the transition guards.
 3. Kubernetes client factory + namespace probe. Unit tests with a fake client:
    success, 404 namespace, 401/403, timeout, skip `local://` and RHEL.

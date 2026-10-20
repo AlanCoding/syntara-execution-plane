@@ -5,19 +5,22 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import col
 
-from execution_plane.cluster.cluster_service import ClusterService, NoopDiscoveryMechanism
+from execution_plane.cluster.cluster_registrar import ClusterRegistrar, NoopDiscoveryMechanism
 from execution_plane.cluster.cluster_store import ClusterStore
-from execution_plane.execution_target.execution_target_service import ExecutionTargetService
 from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
 from execution_plane.models.cluster import Cluster, ClusterStatus
 from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane.models.execution_target_placement import KubernetesPlacement
+
+if TYPE_CHECKING:
+    from execution_plane.cluster.ports import ClusterBindingReconcilerStore
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -31,11 +34,13 @@ class ClusterBindingReconciler:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        cluster_service: ClusterService,
+        cluster_registrar: ClusterRegistrar,
+        cluster_store: ClusterBindingReconcilerStore,
     ) -> None:
-        """Use a short-lived session factory and the Cluster domain Service."""
+        """Use a short-lived session factory and actor-specific Cluster ports."""
         self._session_factory = session_factory
-        self._service = cluster_service
+        self._registrar = cluster_registrar
+        self._store = cluster_store
 
     async def run(self) -> None:
         """Claim desired states and retry transient setup/drain errors forever."""
@@ -77,7 +82,7 @@ class ClusterBindingReconciler:
     async def _reconcile(self, binding: ClusterBinding) -> None:
         """Apply one desired state and persist only if the revision is still current."""
         try:
-            cluster = await self._service.get_by_source(binding.client_id, binding.source_integration_id)
+            cluster = await self._store.get_by_source(binding.client_id, binding.source_integration_id)
             if not binding.enabled:
                 status = await self._reconcile_delete(cluster)
                 cluster_id = None if cluster is None else cluster.id
@@ -119,7 +124,7 @@ class ClusterBindingReconciler:
     ) -> tuple[str, uuid.UUID | None]:
         """Create or update a cluster and its default target using stable identity."""
         if cluster is None:
-            created = await self._service.provision(
+            created = await self._registrar.provision(
                 binding.name,
                 binding.endpoint,
                 binding.credential,
@@ -131,7 +136,7 @@ class ClusterBindingReconciler:
                 source_revision=binding.revision,
                 project_ids=binding.project_ids,
             )
-            created = await self._service.update_source_binding(
+            created = await self._store.update_source_binding(
                 created.id,
                 client_id=binding.client_id,
                 integration_id=binding.source_integration_id,
@@ -143,7 +148,7 @@ class ClusterBindingReconciler:
 
         current = cluster
         if current.status is ClusterStatus.DRAINING or not current.enabled:
-            current = await self._service.provision(
+            current = await self._registrar.provision(
                 binding.name,
                 binding.endpoint,
                 binding.credential,
@@ -155,7 +160,7 @@ class ClusterBindingReconciler:
                 source_revision=binding.revision,
                 project_ids=binding.project_ids,
             )
-        await self._service.sync_update(
+        await self._registrar.sync_update(
             current.id,
             updated_by=SYSTEM_ACTOR_ID,
             name=binding.name,
@@ -164,7 +169,7 @@ class ClusterBindingReconciler:
             placement=KubernetesPlacement(namespace=binding.namespace),
             labels=binding.labels,
         )
-        current = await self._service.update_source_binding(
+        current = await self._store.update_source_binding(
             current.id,
             client_id=binding.client_id,
             integration_id=binding.source_integration_id,
@@ -179,7 +184,7 @@ class ClusterBindingReconciler:
         if cluster is None:
             return "deleted"
         if cluster.status is not ClusterStatus.DRAINING:
-            await self._service.request_delete(cluster.id, SYSTEM_ACTOR_ID)
+            await self._store.request_delete(cluster.id, SYSTEM_ACTOR_ID)
         return "deleting"
 
 
@@ -189,12 +194,12 @@ async def run_cluster_binding_reconciler(database_url: str) -> None:
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     cluster_store = ClusterStore.from_engine(engine)
     target_store = ExecutionTargetStore.from_engine(engine)
-    cluster_service = ClusterService(
+    cluster_registrar = ClusterRegistrar(
         cluster_store,
-        ExecutionTargetService(target_store),
+        target_store,
         NoopDiscoveryMechanism(),
     )
-    reconciler = ClusterBindingReconciler(session_factory, cluster_service)
+    reconciler = ClusterBindingReconciler(session_factory, cluster_registrar, cluster_store)
     try:
         await reconciler.run()
     finally:

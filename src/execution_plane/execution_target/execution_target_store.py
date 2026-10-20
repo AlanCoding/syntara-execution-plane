@@ -9,6 +9,16 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
 
+from execution_plane.execution_target.ports import (
+    ExecutionTargetCleanupStore,
+    ExecutionTargetClientQueryStore,
+    ExecutionTargetCommandStore,
+    ExecutionTargetCredentialStore,
+    ExecutionTargetDrainStore,
+    ExecutionTargetLookupStore,
+    ExecutionTargetRegistrationStore,
+    ExecutionTargetSnapshotStore,
+)
 from execution_plane.labels import labels_with_execution_target_id, merge_user_labels
 from execution_plane.models.cluster import Cluster, ClusterStatus
 from execution_plane.models.execution_target import BackendType, ExecutionTarget, TargetStatus
@@ -45,7 +55,17 @@ class ClusterNotAvailableError(ValueError):
     """Raised when a target is created for a Cluster that cannot accept targets."""
 
 
-class ExecutionTargetStore(StoreBase):
+class ExecutionTargetStore(
+    StoreBase,
+    ExecutionTargetClientQueryStore,
+    ExecutionTargetCleanupStore,
+    ExecutionTargetCommandStore,
+    ExecutionTargetCredentialStore,
+    ExecutionTargetDrainStore,
+    ExecutionTargetLookupStore,
+    ExecutionTargetRegistrationStore,
+    ExecutionTargetSnapshotStore,
+):
     """Persist execution targets and own their database resources."""
 
     @staticmethod
@@ -127,11 +147,16 @@ class ExecutionTargetStore(StoreBase):
                 await self._rollback(session)
                 raise
 
-    async def get(self, target_id: uuid.UUID, *, include_secret: bool = False) -> ExecutionTarget | None:
-        """Return a target by ID, redacting its credential by default."""
+    async def get(self, target_id: uuid.UUID) -> ExecutionTarget | None:
+        """Return a target by ID with its credential redacted."""
         async with self._session_context() as session:
             target = await session.get(ExecutionTarget, target_id)
-            return target if include_secret or target is None else self._without_secret(target)
+            return None if target is None else self._without_secret(target)
+
+    async def get_with_credentials(self, target_id: uuid.UUID) -> ExecutionTarget | None:
+        """Return a target by ID with its credential intact."""
+        async with self._session_context() as session:
+            return await session.get(ExecutionTarget, target_id)
 
     async def list(
         self,

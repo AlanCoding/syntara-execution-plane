@@ -1,4 +1,4 @@
-# Execution Plane: Cluster and Execution Target Service Architecture
+# Execution Plane: Cluster and Execution Target Architecture
 
 ## Status and scope
 
@@ -23,9 +23,9 @@ which work can be executed.
 - Eligibility and lifecycle are separate concerns. `enabled` controls whether
   a resource may participate in selection; lifecycle status records its
   operational state.
-- Services provide domain operations. Stores own database sessions,
+- Actor-specific ports provide domain operations. Stores own database sessions,
   transactions, and persistence details. SQLAlchemy sessions do not cross the
-  Service boundary.
+  port boundary.
 - Deletion is a lifecycle transition followed by asynchronous drain and
   physical finalization. It is not an immediate cascade delete.
 - Connectivity secrets are protected credentials, not ordinary metadata.
@@ -178,7 +178,7 @@ The database and stores enforce the following invariants:
 4. A partial unique index on `execution_targets.cluster_id` where `is_default`
    is true enforces uniqueness of the default target.
 5. The default target cannot be updated or directly deleted through
-   `ExecutionTargetService`. It is removed only as part of a Cluster
+   `ExecutionTargetCommandStore`. It is removed only as part of a Cluster
    deletion, which removes all related targets.
 6. A normal target update cannot change `cluster_id` or `is_default`.
 7. A target is eligible for new work only when it and its Cluster are enabled
@@ -193,17 +193,17 @@ The at-least-one-child invariant is represented by registration and lifecycle
 logic; a simple foreign key cannot enforce it. `ClusterStore` always creates
 the Cluster record in `REGISTERING` before discovery. `REGISTERING` may
 therefore temporarily have no targets, and is unavailable for selection.
-The default target is created through `ExecutionTargetService`, and the
+The default target is created through `ExecutionTargetRegistrationStore`, and the
 Cluster cannot become `ACTIVE` until that target exists.
 
 ## Registration and discovery operation
 
-Registration is a domain operation orchestrated by `ClusterService` and
-persisted by `ClusterStore`. The Service owns the discovery workflow and
-discovery-mechanism interaction; the store owns only persistence, transactions,
-and lifecycle state changes.
+Registration is a domain operation orchestrated by `ClusterRegistrar` and
+persisted by `ClusterStore`. The Registrar owns discovery workflow and
+discovery-mechanism interaction; the Store owns persistence, transactions, and
+lifecycle state changes.
 
-At registration, `ClusterService` first asks `ClusterStore` to create and
+At registration, `ClusterRegistrar` first asks `ClusterStore` to create and
 persist the Cluster in `REGISTERING`. It then invokes a discovery mechanism to
 validate connectivity, discover configured targets, and determine which target
 is the protected default. The discovery mechanism returns domain-level target
@@ -213,25 +213,25 @@ database sessions.
 The discovery boundary is:
 
 ```text
-ClusterService
+ClusterRegistrar
   -> ClusterStore.create(cluster_definition)
   -> ClusterDiscoveryMechanism.discover(cluster_definition)
-  -> ExecutionTargetService.create(cluster_id, target_definition)
+  -> ExecutionTargetRegistrationStore.create(cluster_id, target_definition)
   -> ExecutionTargetStore.create(...)
 ```
 
-The registration sequence keeps persistence behind the store while leaving
-workflow orchestration in the Service. The discovery mechanism returns domain
-data and does not receive a database session. `ClusterService` selects which
+The registration sequence keeps persistence behind the Store while leaving
+workflow orchestration in the Registrar. The discovery mechanism returns domain
+data and does not receive a database session. `ClusterRegistrar` selects which
 discovered target is the default and passes that designation to
-`ExecutionTargetService`; it does not create target records itself.
+`ExecutionTargetRegistrationStore`; it does not create target records itself.
 
 ```mermaid
 sequenceDiagram
     participant C as Caller
-    participant R as ClusterService
+    participant R as ClusterRegistrar
     participant S as ClusterStore
-    participant TR as ExecutionTargetService
+    participant TR as TargetRegistrationStore
     participant TS as ExecutionTargetStore
     participant D as DiscoveryMechanism
     participant DB as execution_plane DB
@@ -269,8 +269,8 @@ sequenceDiagram
 ```
 
 Discovery outcomes are `discovered` or `failed`. For a discovered
-configuration, `ClusterService` creates every target through
-`ExecutionTargetService`, including exactly one target with
+configuration, `ClusterRegistrar` creates every target through
+`ExecutionTargetRegistrationStore`, including exactly one target with
 `is_default=True`, and only then marks the Cluster `ACTIVE` through
 `ClusterStore`. If one or more additional (non-default) targets fail to
 register, the failures are logged and the Cluster still transitions to
@@ -289,7 +289,7 @@ physical finalization.
 
 ### Cluster deletion
 
-`ClusterService.request_delete(cluster_id)` performs one transaction that:
+`ClusterStore.request_delete(cluster_id)` performs one transaction that:
 
 1. Loads the Cluster and verifies its existence.
 2. Handles repeated requests according to the API's idempotency convention.
@@ -308,22 +308,19 @@ before `DrainMonitor` waits for active work to finish.
 ```mermaid
 sequenceDiagram
     participant C as Caller
-    participant CR as ClusterService
-    participant TR as ExecutionTargetService
+    participant TR as TargetDrainStore
     participant DM as DrainMonitor
-    participant WR as WorkItemService
+    participant WR as TargetDrainStore
     participant CS as ClusterStore
     participant TS as ExecutionTargetStore
     participant DB as execution_plane DB
 
     alt Delete Cluster
-        C->>CR: request_delete(cluster_id)
-        CR->>CS: request_delete(cluster_id)
+        C->>CS: request_delete(cluster_id)
         CS->>DB: Mark Cluster and all targets (including default) disabled/DRAINING
         DB-->>CS: Commit drain request
-        CS-->>CR: Draining Cluster
-        CR-->>C: DRAINING
-        DM->>CR: List DRAINING Clusters
+        CS-->>C: DRAINING
+        DM->>CS: List DRAINING Clusters
         DM->>TR: List targets for the Cluster
         loop Until every target is drained
             DM->>WR: is_target_drained(target_id)
@@ -332,34 +329,29 @@ sequenceDiagram
                 DM->>TR: finalize_delete(target_id)
             end
         end
-        DM->>CR: finalize_delete(cluster_id)
+        DM->>CS: finalize_delete(cluster_id)
     else Delete non-default ExecutionTarget
         C->>TR: request_delete(target_id)
-        TR->>TR: Verify target is not the default
-        alt is default target
-            TR-->>C: Rejected — default target cannot be directly deleted
-        else is not default target
-            TR->>TS: request_delete(target_id)
-            TS->>DB: Mark target disabled/DRAINING
-            DB-->>TS: Commit drain request
-            TS-->>TR: Draining target
-            TR-->>C: DRAINING
-            DM->>TR: List DRAINING targets
-            loop Until target is drained
-                DM->>WR: is_target_drained(target_id)
-                WR-->>DM: Still active or drained
-            end
-            DM->>TR: finalize_delete(target_id)
+        TR->>TS: request_delete(target_id)
+        TS->>DB: Atomically reject default or mark non-default disabled/DRAINING
+        DB-->>TS: Commit drain request or default-target rejection
+        TS-->>TR: Draining target
+        TR-->>C: DRAINING
+        DM->>TR: List DRAINING targets
+        loop Until target is drained
+            DM->>WR: is_target_drained(target_id)
+            WR-->>DM: Still active or drained
         end
+        DM->>TR: finalize_delete(target_id)
     end
 ```
 
 `DrainMonitor` owns drain polling in the worker process. It finds draining
-Clusters through `ClusterService`, relies on target eligibility filtering to
-prevent new work, and asks `WorkItemService` whether each target's active
+Clusters through the `ClusterLifecycleStore` port, relies on target eligibility filtering to
+prevent new work, and asks the Work-owned `TargetDrainStore` whether each target's active
 workers and associated work have completed naturally. For each drained target
-it calls `ExecutionTargetService.finalize_delete`. A Cluster is deleted through
-`ClusterService.finalize_delete` only after all related targets have been
+it calls `ExecutionTargetDrainStore.finalize_delete`. A Cluster is deleted through
+`ClusterStore.finalize_delete` only after all related targets have been
 removed.
 
 Drain polling runs as asyncio tasks initiated and supervised by `DrainMonitor`.
@@ -374,52 +366,57 @@ operator intervention to resolve.
 
 ### ExecutionTarget deletion
 
-`ExecutionTargetService.request_delete(target_id)` performs the target request:
+`ExecutionTargetCommandStore.request_delete(target_id)` performs the target request:
 
-1. It rejects direct deletion of the protected default target. The default
-   target is removed only as part of a Cluster deletion.
-2. It marks the target `enabled=False` and `status=DRAINING` in a transaction.
+1. It delegates to the Store transition, which atomically rejects direct
+   deletion of the protected default target. The default target is removed only
+   as part of a Cluster deletion.
+2. For a non-default target, the Store marks it `enabled=False` and
+   `status=DRAINING` in a transaction.
 3. It updates audit fields and returns or exposes the draining state.
 4. It returns without launching a drain task.
-5. `DrainMonitor` observes the draining target and asks `WorkItemService`
+5. `DrainMonitor` observes the draining target and asks the Work-owned drain port
    whether its active workers and associated work have completed naturally.
 6. After the drained predicate is satisfied, `DrainMonitor` delegates physical
-   deletion to `ExecutionTargetService.finalize_delete`.
+   deletion to `ExecutionTargetDrainStore.finalize_delete`.
 
 The drained predicate is a worker/lifecycle concern and must account for the
 WorkItem states and worker ownership semantics. Until the predicate is true,
 the target remains in the database as an administrative record but is excluded
 from selection.
 
-## Persistence and Service boundaries
+## Persistence and domain boundaries
 
-Services are the domain-facing boundary; stores are the database-facing
-boundary. `ClusterService` may coordinate discovery mechanisms, while the
-process-owned `DrainMonitor` coordinates drain polling through Services. Only a
-store creates sessions, executes persistence operations, and commits or rolls
-back transactions.
+Stores are transactional repository adapters, and consumers depend on the
+narrow port that matches their role. `ClusterRegistrar` coordinates discovery,
+provisioning, and synchronized Cluster/default-target updates. The
+process-owned `DrainMonitor` uses `ClusterLifecycleStore`; placement uses
+`ClusterQueryStore`; worker managers use `ClusterCredentialStore`; and desired
+state reconciliation uses `ClusterBindingReconcilerStore`. Only a store creates
+sessions, executes persistence operations, and commits or rolls back
+transactions.
 
 Outside the Cluster package, production code references `ClusterStore` only in
 composition roots that construct it with `from_engine` or `from_database_url`
-and inject it into `ClusterService`. Every other consumer performs Cluster
-retrieval, listing, source binding, lifecycle, drain, and deletion operations
-through `ClusterService`.
+and either `ClusterRegistrar` or an actor-specific port. Every other consumer
+depends on that actor-specific port rather than the concrete Store.
 
 Outside the ExecutionTarget package, production code references
 `ExecutionTargetStore` only in composition roots that construct it with one of
-its factory methods and inject it into `ExecutionTargetService`. Command
-handlers, workers, worker managers, placement, drain monitoring, and orphan
-reconciliation use `ExecutionTargetService` for target reads, updates,
-lifecycle, drain, and deletion operations.
+its factory methods and inject it into an actor-specific port. Command handlers
+use command transitions; workers and placement use lookup, snapshot, and
+credential ports; drain monitoring and orphan reconciliation use drain and
+cleanup ports.
 
 ```mermaid
 flowchart LR
     Caller[Router or domain caller]
 
-    subgraph Services[Domain boundary]
-        CR[ClusterService]
-        TR[ExecutionTargetService]
-        WR[WorkItemService]
+    subgraph Domain[Domain boundary]
+        CR[ClusterRegistrar]
+        CP[Cluster actor ports]
+        TP[ExecutionTarget actor ports]
+        WR[Work actor services]
     end
 
     subgraph Stores[Persistence boundary]
@@ -431,18 +428,19 @@ flowchart LR
     DB[(execution_plane PostgreSQL schema)]
 
     Caller --> CR
-    Caller --> TR
+    Caller --> TP
     Caller --> WR
     CR -->|domain operations| CS
-    TR -->|domain operations| TS
-    WR -->|domain queries| WS
+    CP -->|actor operations| CS
+    TP -->|actor operations| TS
+    WR -->|actor operations| WS
     CS -->|owned sessions and transactions| DB
     TS -->|owned sessions and transactions| DB
     WS -->|owned sessions and transactions| DB
 
     X[SQLAlchemy sessions do not cross this boundary]
     X -.-> CR
-    X -.-> TR
+    X -.-> TP
     X -.-> WR
 ```
 
@@ -456,29 +454,39 @@ and support asynchronous disposal/context-manager usage.
 
 `ClusterStore` provides creation of the `REGISTERING` record, retrieval,
 listing, Cluster status transitions, Cluster drain requests, and finalization
-guarded by the no-children invariant. It does not select or invoke a discovery
-mechanism and does not create ExecutionTargets.
+guarded by the no-children invariant. Its cluster drain transaction also marks
+the cluster's target rows draining so the parent and children cannot observe
+inconsistent states. It does not select or invoke a discovery mechanism and does
+not create ExecutionTargets.
 
 `ExecutionTargetStore` provides target creation, retrieval, listing with
 optional eligibility filtering, narrow metadata updates, drain requests, and
-physical finalization. `finalize_delete` is callable only after the Service's
-drain monitor has established that the target is safe to remove.
+physical finalization. Its `finalize_delete` transition rechecks active WorkItems
+and detaches historical work in the same transaction; it is callable only after
+the worker's drain monitor has established that the target is safe to remove.
 
-### Services
+### Domain orchestration and ports
 
-Services are the domain-facing layer used by the router, discovery mechanism,
-and drain consumers. They do not accept or expose SQLAlchemy sessions.
+Domain orchestration and actor ports are the domain-facing layer used by the
+router, discovery mechanism, workers, and drain consumers. They do not accept
+or expose SQLAlchemy sessions.
 
-`ClusterService` exposes registration, retrieval, administrative listing, and
-graceful deletion. `ExecutionTargetService` exposes manual target
-registration, retrieval, administrative or eligible listing, narrow updates,
-and graceful deletion. Both Services preserve lifecycle state in
-administrative views while selection-oriented operations exclude unavailable
-resources.
+`ClusterRegistrar` exposes registration, provisioning, and synchronized
+Cluster/default-target updates. Cluster consumers use query, credential,
+source-binding, lifecycle, and reconciler ports for their specific operations.
+ExecutionTarget consumers use command, client-query, snapshot, lookup,
+credential, registration, cleanup, and drain ports. Administrative reads
+preserve lifecycle state while selection-oriented operations exclude unavailable
+resources. The drain port uses the same explicit `finalize_delete` persistence
+name as the Store; `DrainMonitor` is responsible for proving that the target is
+drained before calling it.
 
-`WorkItemService` is implemented in `execution_plane.work_item` and owns the complete
-Work domain contract. `WorkStore` remains internal to that package as the Work
-persistence boundary.
+Work uses actor-specific ports in `execution_plane.work_item`. `WorkScheduler`
+owns claim-and-place orchestration; workers and managers use the progress port,
+the Completion Notifier uses the outbox port, and `WorkStore` implements every
+actor port as the persistence boundary.
+Cluster ports are declared in `execution_plane.cluster.ports`; ExecutionTarget
+ports are declared in `execution_plane.execution_target.ports`.
 
 ## API and security boundary
 
@@ -492,7 +500,7 @@ values are never returned. APIs expose only a redacted status or equivalent
 non-secret metadata. Credentials must also be excluded from logs, labels,
 ordinary model serialization, and audit payloads.
 
-The existing router is temporarily hosted by Syntara. The store and Service
+The existing router is temporarily hosted by Syntara. The store and port
 boundaries are independent of that hosting arrangement so the Execution Plane
 can later become a standalone service.
 
@@ -517,6 +525,6 @@ enough to ensure that finalization cannot race with active execution.
 ## Related context
 
 - [AAP-92716](https://redhat.atlassian.net/browse/AAP-92716) describes the
-  broader Service concept and lifecycle concerns.
+  broader service concept and lifecycle concerns.
 - [`integration.md`](integration.md) documents the current temporary boundary
   crossings between Syntara and the Execution Plane.

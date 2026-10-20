@@ -8,6 +8,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlmodel import col
 
+from execution_plane.cluster.ports import (
+    ClusterCredentialStore,
+    ClusterLifecycleStore,
+    ClusterQueryStore,
+    ClusterRegistrationStore,
+    ClusterSourceBindingStore,
+)
 from execution_plane.labels import labels_with_cluster_id, merge_user_labels
 from execution_plane.models.cluster import Cluster, ClusterStatus, ClusterType
 from execution_plane.models.cluster_binding import ClusterBinding
@@ -27,7 +34,14 @@ class ClusterNotFoundError(LookupError):
         super().__init__(f"Cluster {cluster_id} does not exist")
 
 
-class ClusterStore(StoreBase):
+class ClusterStore(
+    StoreBase,
+    ClusterRegistrationStore,
+    ClusterQueryStore,
+    ClusterCredentialStore,
+    ClusterSourceBindingStore,
+    ClusterLifecycleStore,
+):
     """Persist Cluster state and own the database resources it uses."""
 
     @staticmethod
@@ -81,13 +95,16 @@ class ClusterStore(StoreBase):
                 await session.rollback()
                 raise
 
-    async def get(self, cluster_id: uuid.UUID, *, include_secret: bool = False) -> Cluster | None:
-        """Return a Cluster, redacting its API credential unless execution needs it."""
+    async def get(self, cluster_id: uuid.UUID) -> Cluster | None:
+        """Return a Cluster with its credentials redacted."""
         async with self._session_context() as session:
             cluster = await session.get(Cluster, cluster_id)
-            if cluster is None or include_secret:
-                return cluster
-            return self._without_secret(cluster)
+            return None if cluster is None else self._without_secret(cluster)
+
+    async def get_with_credentials(self, cluster_id: uuid.UUID) -> Cluster | None:
+        """Return a Cluster with its API credential and CA certificate intact."""
+        async with self._session_context() as session:
+            return await session.get(Cluster, cluster_id)
 
     async def get_by_name(self, name: str) -> Cluster | None:
         """Return a Cluster by name without its API credential."""
