@@ -168,7 +168,7 @@ class _Store:
         return self.target
 
     async def list_for_client(
-        self, client_id: str, *, limit: int, target_id: uuid.UUID | None = None
+        self, client_id: str, *, limit: int, target_id: uuid.UUID | None = None, **_: object
     ) -> Sequence[ExecutionTarget]:
         self.client_scoped_queries.append((client_id, limit, target_id))
         return [self.target]

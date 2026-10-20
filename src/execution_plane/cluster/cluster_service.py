@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from execution_plane.models.cluster import Cluster, ClusterStatus, ClusterType
 from execution_plane.models.execution_target import BackendType
@@ -319,9 +319,22 @@ class ClusterService:
         """List Clusters for administrative or recovery workflows."""
         return await self._store.list(status=status, enabled=enabled)
 
-    async def list_bindings_for_client(self, client_id: str, *, limit: int) -> Sequence[ClusterBinding]:
+    async def list_bindings_for_client(
+        self,
+        client_id: str,
+        *,
+        limit: int,
+        cursor: dict[str, Any] | None = None,
+        sort_direction: str = "asc",
+    ) -> Sequence[ClusterBinding]:
         """List desired-state bindings owned by one service client."""
-        return await self._store.list_bindings_for_client(client_id, limit=limit)
+        return await self._store.list_bindings_for_client(
+            client_id, limit=limit, cursor=cursor, sort_direction=sort_direction
+        )
+
+    async def count_bindings_for_client(self, client_id: str) -> int:
+        """Return the number of desired-state bindings owned by one service client."""
+        return await self._store.count_bindings_for_client(client_id)
 
     async def get_binding_for_client(
         self,

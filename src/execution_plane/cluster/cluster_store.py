@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlmodel import col
 
 from execution_plane.labels import labels_with_cluster_id, merge_user_labels
 from execution_plane.models.cluster import Cluster, ClusterStatus, ClusterType
 from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane.models.execution_target import ExecutionTarget, TargetStatus
-from execution_plane.store_base import StoreBase
+from execution_plane.store_base import StoreBase, apply_created_at_cursor
 
 if TYPE_CHECKING:
     import uuid
@@ -146,17 +146,34 @@ class ClusterStore(StoreBase):
             result = await session.execute(statement)
             return [self._without_secret(cluster) for cluster in result.scalars().all()]
 
-    async def list_bindings_for_client(self, client_id: str, *, limit: int) -> Sequence[ClusterBinding]:
+    async def list_bindings_for_client(
+        self,
+        client_id: str,
+        *,
+        limit: int,
+        cursor: dict[str, Any] | None = None,
+        sort_direction: str = "asc",
+    ) -> Sequence[ClusterBinding]:
         """List desired-state bindings owned by one service client."""
-        statement = (
-            select(ClusterBinding)
-            .where(col(ClusterBinding.client_id) == client_id)
-            .order_by(col(ClusterBinding.created_at), col(ClusterBinding.source_integration_id))
-            .limit(limit)
+        statement = select(ClusterBinding).where(col(ClusterBinding.client_id) == client_id)
+        statement = apply_created_at_cursor(
+            statement,
+            cursor,
+            col(ClusterBinding.created_at),
+            col(ClusterBinding.source_integration_id),
+            sort_direction=sort_direction,
         )
         async with self._session_context() as session:
-            result = await session.execute(statement)
+            result = await session.execute(statement.limit(limit))
             return list(result.scalars().all())
+
+    async def count_bindings_for_client(self, client_id: str) -> int:
+        """Return the number of desired-state bindings owned by one service client."""
+        async with self._session_context() as session:
+            result = await session.execute(
+                select(func.count()).select_from(ClusterBinding).where(col(ClusterBinding.client_id) == client_id)
+            )
+            return result.scalar_one()
 
     async def get_binding_for_client(
         self,

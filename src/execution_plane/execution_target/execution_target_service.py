@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from execution_plane.execution_target.execution_target_store import (
     DefaultExecutionTargetError,
@@ -78,9 +78,17 @@ class ExecutionTargetService:
         *,
         limit: int,
         target_id: uuid.UUID | None = None,
+        cursor: dict[str, Any] | None = None,
+        sort_direction: str = "asc",
     ) -> Sequence[ExecutionTarget]:
         """List targets owned by clusters belonging to one service client."""
-        return await self._store.list_for_client(client_id, limit=limit, target_id=target_id)
+        return await self._store.list_for_client(
+            client_id, limit=limit, target_id=target_id, cursor=cursor, sort_direction=sort_direction
+        )
+
+    async def count_for_client(self, client_id: str) -> int:
+        """Return the number of targets owned through one service client's clusters."""
+        return await self._store.count_for_client(client_id)
 
     async def request_delete(self, target_id: uuid.UUID, updated_by: uuid.UUID) -> ExecutionTarget:
         """Disable a non-default target and mark it as DRAINING."""
