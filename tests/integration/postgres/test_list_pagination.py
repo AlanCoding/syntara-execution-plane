@@ -354,6 +354,142 @@ async def _paginate_all(client, sort: str, page_size: int = 7) -> list[dict]:
     return items
 
 
+async def _assert_page_round_trip(client, path, expected_ids, *, sort=None, page_size=2) -> None:
+    """Visit every page forward, backward to page one, and forward again."""
+    expected_pages = [expected_ids[i : i + page_size] for i in range(0, len(expected_ids), page_size)]
+    assert len(expected_pages) >= 3
+    params = {"limit": page_size}
+    if sort is not None:
+        params["sort"] = sort
+
+    async def page(cursor=None) -> dict:
+        query = {**params, "cursor": cursor} if cursor is not None else params
+        response = await client.get(path, params=query)
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    body = await page()
+    for index, expected in enumerate(expected_pages):
+        assert [row["id"] for row in body["resources"]] == expected
+        assert (body["prev"] is None) == (index == 0)
+        assert (body["next"] is None) == (index == len(expected_pages) - 1)
+        if body["next"] is not None:
+            body = await page(body["next"])
+
+    for index in range(len(expected_pages) - 2, -1, -1):
+        body = await page(body["prev"])
+        assert [row["id"] for row in body["resources"]] == expected_pages[index]
+        assert (body["prev"] is None) == (index == 0)
+        assert body["next"] is not None
+
+    for index in range(1, len(expected_pages)):
+        body = await page(body["next"])
+        assert [row["id"] for row in body["resources"]] == expected_pages[index]
+        assert body["prev"] is not None
+        assert (body["next"] is None) == (index == len(expected_pages) - 1)
+
+
+@pytest.mark.parametrize(
+    "sort",
+    [None, "created_at", "status", "-status", "resource_cleanup_status", "-resource_cleanup_status", "id", "-id"],
+)
+async def test_work_items_backward_pagination_round_trip(sort_client, sort):
+    expected = await _all_items(sort_client, sort=sort or "-created_at")
+    await _assert_page_round_trip(
+        sort_client, "/v1/work-items", [row["id"] for row in expected], sort=sort, page_size=7
+    )
+
+
+@pytest.mark.parametrize("sort", [None, "created_at", "-created_at"])
+async def test_clusters_backward_pagination_round_trip(clusters_client, sort):
+    client, binding_ids = clusters_client
+    expected = list(reversed(binding_ids)) if sort == "-created_at" else binding_ids
+    await _assert_page_round_trip(client, "/v1/clusters", expected, sort=sort)
+
+
+@pytest.mark.parametrize("sort", [None, "created_at", "-created_at"])
+async def test_targets_backward_pagination_round_trip(targets_client, sort):
+    client, target_ids = targets_client
+    expected = list(reversed(target_ids)) if sort == "-created_at" else target_ids
+    await _assert_page_round_trip(client, "/v1/execution-targets", expected, sort=sort)
+
+
+@pytest.mark.parametrize("sort", ["claimed_at", "-claimed_at", "completed_at", "-completed_at"])
+async def test_nullable_work_item_sorts_rejected(sort_client, sort):
+    response = await sort_client.get("/v1/work-items", params={"sort": sort})
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("path", ["/v1/clusters", "/v1/execution-targets"])
+@pytest.mark.parametrize("sort", ["status", "-status", "id", "cowabunga"])
+async def test_unsupported_resource_sort_rejected(pg_client, path, sort):
+    client, _, _ = pg_client
+    response = await client.get(path, params={"sort": sort})
+    assert response.status_code == 422, response.text
+
+
+_VALID_CURSOR = {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "created_at": _BASE_TIME.isoformat(),
+    "direction": "next",
+    "sort_field": "created_at",
+    "sort_direction": "asc",
+    "sort_value": _BASE_TIME.isoformat(),
+}
+_BAD_CURSORS = [
+    pytest.param([], id="array"),
+    pytest.param(None, id="null"),
+    pytest.param("cursor", id="string"),
+    *[
+        pytest.param({k: v for k, v in _VALID_CURSOR.items() if k != field}, id=f"missing-{field}")
+        for field in _VALID_CURSOR
+    ],
+    *[
+        pytest.param({**_VALID_CURSOR, field: value}, id=f"invalid-{field}-{value!r}")
+        for field, value in [
+            ("id", []),
+            ("id", 123),
+            ("id", "invalid-uuid"),
+            ("created_at", []),
+            ("created_at", 123),
+            ("created_at", "2025-06-01T12:00:00"),
+            ("created_at", "invalid-date"),
+            ("sort_value", None),
+            ("sort_value", []),
+            ("sort_value", 123),
+            ("sort_value", "invalid-date"),
+            ("sort_value", "2025-06-01T12:00:00"),
+            ("direction", "sideways"),
+            ("sort_direction", "sideways"),
+            ("sort_field", []),
+        ]
+    ],
+]
+
+
+@pytest.mark.parametrize("path", ["/v1/work-items", "/v1/clusters", "/v1/execution-targets"])
+@pytest.mark.parametrize("payload", _BAD_CURSORS)
+async def test_structurally_malformed_cursor_returns_422(pg_client, path, payload):
+    client, _, _ = pg_client
+    token = base64.b64encode(json.dumps(payload).encode()).decode()
+    response = await client.get(path, params={"cursor": token, "sort": "created_at"})
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("path", ["/v1/work-items", "/v1/clusters", "/v1/execution-targets"])
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        {**_VALID_CURSOR, "sort_direction": "desc"},
+        {**_VALID_CURSOR, "sort_field": "status", "sort_value": "pending"},
+    ],
+)
+async def test_cursor_must_match_requested_sort(pg_client, path, cursor):
+    client, _, _ = pg_client
+    response = await client.get(path, params={"cursor": encode_cursor(cursor), "sort": "created_at"})
+    assert response.status_code == 422, response.text
+
+
 # =============================================================================
 # Work items — pagination
 # =============================================================================

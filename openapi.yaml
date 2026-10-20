@@ -67,11 +67,20 @@ paths:
         in: query
         required: false
         schema:
-          anyOf:
-          - type: string
-            pattern: ^-?[a-z][a-z0-9_]*$
-          - type: 'null'
+          enum:
+          - created_at
+          - -created_at
+          - status
+          - -status
+          - resource_cleanup_status
+          - -resource_cleanup_status
+          - id
+          - -id
+          type: string
+          description: Work-item sort field; newest first by default.
+          default: -created_at
           title: Sort
+        description: Work-item sort field; newest first by default.
       - name: include_total
         in: query
         required: false
@@ -143,11 +152,14 @@ paths:
         in: query
         required: false
         schema:
-          anyOf:
-          - type: string
-            pattern: ^-?[a-z][a-z0-9_]*$
-          - type: 'null'
+          enum:
+          - created_at
+          - -created_at
+          type: string
+          description: Creation-time sort order; oldest first by default.
+          default: created_at
           title: Sort
+        description: Creation-time sort order; oldest first by default.
       - name: include_total
         in: query
         required: false
@@ -219,11 +231,14 @@ paths:
         in: query
         required: false
         schema:
-          anyOf:
-          - type: string
-            pattern: ^-?[a-z][a-z0-9_]*$
-          - type: 'null'
+          enum:
+          - created_at
+          - -created_at
+          type: string
+          description: Creation-time sort order; oldest first by default.
+          default: created_at
           title: Sort
+        description: Creation-time sort order; oldest first by default.
       - name: include_total
         in: query
         required: false

@@ -7,6 +7,9 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from execution_plane.api.main import create_app
+from execution_plane.models.cluster_binding import ClusterBinding
+from execution_plane.models.execution_target import ExecutionTarget
+from execution_plane.models.work_item import WorkItem
 from execution_plane_client.commands.clusters import ClusterRegister
 from execution_plane_client.commands.control import Completion
 from tests.test_command_api import command_message
@@ -194,3 +197,18 @@ def test_execution_target_response_uses_discriminated_placement() -> None:
 def test_cluster_binding_request_remains_namespace_based() -> None:
     assert "namespace" in ClusterRegister.model_fields
     assert "placement" not in ClusterRegister.model_fields
+
+
+@pytest.mark.parametrize(
+    ("path", "model", "default"),
+    [
+        ("/v1/work-items", WorkItem, "-created_at"),
+        ("/v1/clusters", ClusterBinding, "created_at"),
+        ("/v1/execution-targets", ExecutionTarget, "created_at"),
+    ],
+)
+def test_list_sort_contract_matches_model_fields_and_endpoint_default(path, model, default) -> None:
+    parameters = create_app().openapi()["paths"][path]["get"]["parameters"]
+    schema = next(parameter["schema"] for parameter in parameters if parameter["name"] == "sort")
+    assert schema["default"] == default
+    assert set(schema["enum"]) == {sort for field in model.__sortable_fields__ for sort in (field, f"-{field}")}

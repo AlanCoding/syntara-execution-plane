@@ -20,7 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from execution_plane.api.auth import ServiceIdentity, get_service_identity, require_scope
 from execution_plane.api.openapi import configure_command_openapi
-from execution_plane.api.pagination import EPListParams, ResourcesResponse, generate_response
+from execution_plane.api.pagination import (
+    CreatedAtListParams,
+    ResourcesResponse,
+    WorkItemListParams,
+    generate_response,
+)
 from execution_plane.api.schemas import ClusterRead, ExecutionTargetRead, WorkItemRead  # noqa: TC001
 from execution_plane.commands.clusters import ResourceNotFoundError
 from execution_plane.commands.context import EPCommandContext
@@ -156,13 +161,9 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     async def work_items(
         request: Request,
         identity: Annotated[ServiceIdentity, Depends(require_scope("work-items:read"))],
-        params: Annotated[EPListParams, Query()],
+        params: Annotated[WorkItemListParams, Query()],
     ) -> ResourcesResponse[WorkItemRead]:
-        sort_raw = params.sort or "-created_at"
-        if sort_raw.startswith("-"):
-            sort_field, sort_direction = sort_raw[1:], "desc"
-        else:
-            sort_field, sort_direction = sort_raw, "asc"
+        sort_field, sort_direction = params.sort_order
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
             raw = await queries.work_items(
@@ -191,15 +192,16 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     async def clusters(
         request: Request,
         identity: Annotated[ServiceIdentity, Depends(require_scope("clusters:read"))],
-        params: Annotated[EPListParams, Query()],
+        params: Annotated[CreatedAtListParams, Query()],
     ) -> ResourcesResponse[ClusterRead]:
+        sort_field, sort_direction = params.sort_order
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
-            raw = await queries.clusters(params.limit, cursor=params.cursor)
+            raw = await queries.clusters(params.limit, cursor=params.cursor, sort_direction=sort_direction)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         trimmed, next_cur, prev_cur = generate_response(
-            raw, params.limit, params.cursor, sort_field="created_at", sort_direction="asc"
+            raw, params.limit, params.cursor, sort_field=sort_field, sort_direction=sort_direction
         )
         total = await queries.count_clusters() if params.include_total else None
         return ResourcesResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)
@@ -216,15 +218,16 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     async def targets(
         request: Request,
         identity: Annotated[ServiceIdentity, Depends(require_scope("execution-targets:read"))],
-        params: Annotated[EPListParams, Query()],
+        params: Annotated[CreatedAtListParams, Query()],
     ) -> ResourcesResponse[ExecutionTargetRead]:
+        sort_field, sort_direction = params.sort_order
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
-            raw = await queries.targets(params.limit, cursor=params.cursor)
+            raw = await queries.targets(params.limit, cursor=params.cursor, sort_direction=sort_direction)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         trimmed, next_cur, prev_cur = generate_response(
-            raw, params.limit, params.cursor, sort_field="created_at", sort_direction="asc"
+            raw, params.limit, params.cursor, sort_field=sort_field, sort_direction=sort_direction
         )
         total = await queries.count_targets() if params.include_total else None
         return ResourcesResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)

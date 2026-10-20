@@ -40,7 +40,9 @@ class EPResourceQueries:
         sort_direction: str = "desc",
     ) -> list[WorkItemRead]:
         """List work without embedding potentially large results."""
-        parsed_cursor = decode_cursor(cursor) if cursor else None
+        parsed_cursor = (
+            decode_cursor(cursor, sort_field=sort_field, sort_direction=sort_direction) if cursor is not None else None
+        )
         items = await self._work.list_for_client(
             client_id=self._client_id,
             limit=limit + 1,
@@ -48,7 +50,7 @@ class EPResourceQueries:
             sort_field=sort_field,
             sort_direction=sort_direction,
         )
-        if parsed_cursor and parsed_cursor.get("direction") == "prev":
+        if parsed_cursor and parsed_cursor["direction"] == "prev":
             items.reverse()
         return [
             WorkItemRead.model_validate(item).model_copy(
@@ -74,13 +76,21 @@ class EPResourceQueries:
             read.completion_event_id, read.state_revision = event.id, event.state_revision
         return read
 
-    async def clusters(self, limit: int, *, cursor: str | None = None) -> list[ClusterRead]:
+    async def clusters(
+        self, limit: int, *, cursor: str | None = None, sort_direction: str = "asc"
+    ) -> list[ClusterRead]:
         """List binding resources, including pending setup and deletion."""
-        parsed_cursor = decode_cursor(cursor) if cursor else None
-        rows = list(
-            await self._clusters.list_bindings_for_client(self._client_id, limit=limit + 1, cursor=parsed_cursor)
+        parsed_cursor = (
+            decode_cursor(cursor, sort_field="created_at", sort_direction=sort_direction)
+            if cursor is not None
+            else None
         )
-        if parsed_cursor and parsed_cursor.get("direction") == "prev":
+        rows = list(
+            await self._clusters.list_bindings_for_client(
+                self._client_id, limit=limit + 1, cursor=parsed_cursor, sort_direction=sort_direction
+            )
+        )
+        if parsed_cursor and parsed_cursor["direction"] == "prev":
             rows.reverse()
         return [ClusterRead.model_validate(row) for row in rows]
 
@@ -101,15 +111,24 @@ class EPResourceQueries:
         resource_id: UUID | None = None,
         *,
         cursor: str | None = None,
+        sort_direction: str = "asc",
     ) -> list[ExecutionTargetRead]:
         """Authorize targets through ownership of their physical cluster."""
-        parsed_cursor = decode_cursor(cursor) if cursor else None
+        parsed_cursor = (
+            decode_cursor(cursor, sort_field="created_at", sort_direction=sort_direction)
+            if cursor is not None
+            else None
+        )
         rows = list(
             await self._targets.list_for_client(
-                self._client_id, limit=limit + 1, target_id=resource_id, cursor=parsed_cursor
+                self._client_id,
+                limit=limit + 1,
+                target_id=resource_id,
+                cursor=parsed_cursor,
+                sort_direction=sort_direction,
             )
         )
-        if parsed_cursor and parsed_cursor.get("direction") == "prev":
+        if parsed_cursor and parsed_cursor["direction"] == "prev":
             rows.reverse()
         return [ExecutionTargetRead.model_validate(row) for row in rows]
 

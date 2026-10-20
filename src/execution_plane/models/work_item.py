@@ -38,8 +38,6 @@ class WorkItem(SQLModel, table=True):
         "status",
         "resource_cleanup_status",
         "id",
-        "completed_at",
-        "claimed_at",
     ]
     __table_args__ = (
         sa.Index("ix_work_items_status", "status"),

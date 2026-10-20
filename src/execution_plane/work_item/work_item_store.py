@@ -33,7 +33,7 @@ _NOTIFY_CHANNEL = "execution_plane_work_items"
 
 def _parse_sort_value(field: str, value: str) -> Any:  # noqa: ANN401
     """Convert a cursor's string sort_value back to the column's native Python type."""
-    if field in {"created_at", "claimed_at", "completed_at"}:
+    if field == "created_at":
         return datetime.fromisoformat(value)
     if field == "id":
         return uuid.UUID(value)
@@ -108,7 +108,7 @@ class WorkStore(StoreBase):
 
         if cursor:
             anchor_id = uuid.UUID(cast("str", cursor["id"]))
-            sort_value_str = cast("str", cursor.get("sort_value") or cursor.get("created_at", ""))
+            sort_value_str = cast("str", cursor["sort_value"])
             anchor_val = _parse_sort_value(sort_field, sort_value_str)
             going_backward = cursor.get("direction") == "prev"
 

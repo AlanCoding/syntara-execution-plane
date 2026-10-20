@@ -5,10 +5,10 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime
-from typing import Annotated, Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
@@ -25,9 +25,36 @@ class EPListParams(BaseModel):
 
     limit: int = Field(default=20, gt=0, le=100)
     cursor: str | None = Field(default=None)
-    # sort is accepted for AO compatibility; EP currently only orders by created_at.
-    sort: Annotated[str, StringConstraints(pattern=r"^-?[a-z][a-z0-9_]*$")] | None = Field(default=None)
+    sort: str = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
     include_total: bool = Field(default=False)
+
+    @property
+    def sort_order(self) -> tuple[str, str]:
+        """Return the selected field and SQL ordering direction."""
+        return self.sort.removeprefix("-"), "desc" if self.sort.startswith("-") else "asc"
+
+
+class WorkItemListParams(EPListParams):
+    """Work-item sorting excludes nullable timestamps until null-aware pagination is supported."""
+
+    sort: Literal[
+        "created_at",
+        "-created_at",
+        "status",
+        "-status",
+        "resource_cleanup_status",
+        "-resource_cleanup_status",
+        "id",
+        "-id",
+    ] = Field(default="-created_at", description="Work-item sort field; newest first by default.")
+
+
+class CreatedAtListParams(EPListParams):
+    """Clusters and execution targets support creation-time sorting, oldest first by default."""
+
+    sort: Literal["created_at", "-created_at"] = Field(
+        default="created_at", description="Creation-time sort order; oldest first by default."
+    )
 
 
 class ResourcesResponse(BaseModel, Generic[T]):  # noqa: UP046
@@ -68,23 +95,53 @@ def encode_cursor(data: dict[str, Any]) -> str:
     return base64.b64encode(json.dumps(data, sort_keys=True).encode()).decode()
 
 
-def decode_cursor(token: str) -> dict[str, Any]:
-    """Decode and whitelist-filter a cursor token; raise ValueError on invalid input.
+def _validate_timestamp(value: str) -> None:
+    """Require an ISO timestamp with a timezone for PostgreSQL keyset comparisons."""
+    if datetime.fromisoformat(value).utcoffset() is None:
+        msg = "cursor timestamps must include a timezone"
+        raise ValueError(msg)
 
-    Simplified from syntara.core.utils.cursor.decode_cursor (single size check,
-    dict-comprehension whitelist instead of typed _filter_to_cursor_data).
+
+def decode_cursor(
+    token: str,
+    *,
+    sort_field: str | None = None,
+    sort_direction: str | None = None,
+) -> dict[str, Any]:
+    """Decode and validate a cursor, optionally checking its sort against the query.
+
+    Derived from syntara.core.utils.cursor.decode_cursor. Unknown fields are
+    ignored; all six known fields are required and must contain strings.
+    Invalid input consistently raises ValueError for an HTTP 422 response.
     """
     if len(token.encode()) > MAX_CURSOR_BYTES:
         msg = "cursor too large"
         raise ValueError(msg)
     try:
-        raw = base64.b64decode(token.encode()).decode()
+        raw = base64.b64decode(token.encode(), validate=True).decode()
         data = json.loads(raw)
-    except Exception as exc:
+    except (ValueError, RecursionError) as exc:
         msg = "invalid cursor"
         raise ValueError(msg) from exc
     if not isinstance(data, dict):
-        raise TypeError(_CURSOR_NOT_OBJECT)
+        raise ValueError(_CURSOR_NOT_OBJECT)  # noqa: TRY004 - invalid cursors consistently map to HTTP 422
+    if any(not isinstance(data.get(field), str) for field in VALID_CURSOR_FIELDS):
+        msg = "cursor requires string id, created_at, direction, sort_field, sort_direction, and sort_value fields"
+        raise ValueError(msg)
+    if data["direction"] not in {"next", "prev"} or data["sort_direction"] not in {"asc", "desc"}:
+        msg = "invalid cursor direction"
+        raise ValueError(msg)
+    if (sort_field is not None and data["sort_field"] != sort_field) or (
+        sort_direction is not None and data["sort_direction"] != sort_direction
+    ):
+        msg = "cursor sort does not match the requested sort"
+        raise ValueError(msg)
+    UUID(data["id"])
+    _validate_timestamp(data["created_at"])
+    if data["sort_field"] == "created_at":
+        _validate_timestamp(data["sort_value"])
+    elif data["sort_field"] == "id":
+        UUID(data["sort_value"])
     return {k: v for k, v in data.items() if k in VALID_CURSOR_FIELDS}
 
 
@@ -98,15 +155,19 @@ def generate_response(
 ) -> tuple[list[Any], str | None, str | None]:
     """Return (trimmed_items, next_cursor, prev_cursor).
 
-    Derived from syntara.core.utils.pagination.generate_response; drops the
-    is_first_page flag, sort_value_fn callback, and backward-pagination
-    asymmetric trim — EP only supports forward navigation via next cursors.
+    Derived from syntara.core.utils.pagination.generate_response. Queries
+    return up to limit + 1 items in display order. On a backward fetch the
+    extra row is at the beginning and indicates an earlier page, while the
+    incoming cursor establishes that a later page exists.
     """
     has_more = len(items) > limit
-    trimmed = items[:limit]
+    going_backward = cursor is not None and decode_cursor(cursor)["direction"] == "prev"
+    trimmed = items[-limit:] if going_backward else items[:limit]
+    has_next = going_backward or has_more
+    has_prev = has_more if going_backward else cursor is not None
 
     next_cursor = None
-    if has_more and trimmed:
+    if has_next and trimmed:
         last = trimmed[-1]
         next_cursor = encode_cursor(
             {
@@ -120,7 +181,7 @@ def generate_response(
         )
 
     prev_cursor = None
-    if cursor and trimmed:
+    if has_prev and trimmed:
         first = trimmed[0]
         prev_cursor = encode_cursor(
             {

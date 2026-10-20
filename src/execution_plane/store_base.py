@@ -27,9 +27,9 @@ def apply_created_at_cursor(
     sort_direction: str = "asc",
 ) -> Select[Any]:
     """Apply creation-time keyset filtering and ordering inside a store."""
-    ascending = (sort_direction == "asc") != (cursor is not None and cursor.get("direction") == "prev")
+    ascending = (sort_direction == "asc") != (cursor is not None and cursor["direction"] == "prev")
     if cursor is not None:
-        anchor_ts = datetime.fromisoformat(cursor["created_at"])
+        anchor_ts = datetime.fromisoformat(cursor["sort_value"])
         anchor_id = UUID(cursor["id"])
         if ascending:
             statement = statement.where((ts_col > anchor_ts) | ((ts_col == anchor_ts) & (id_col > anchor_id)))

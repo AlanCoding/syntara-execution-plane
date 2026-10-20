@@ -43,9 +43,15 @@ EP also has a `/v1/clusters` endpoint that is not currently proxied through AO.
 
 EP list endpoints mirror Syntara's own pagination contract — AO passes EP cursors through unchanged. See the [AO API response format standard](https://github.com/syntara-orchestration/syntara/blob/devel/backend/docs/standards/api-response-format.md) for cursor structure, stable ordering guarantees, and the N+1 fetch pattern.
 
-Query parameters: `limit` (1–100, default 20), `cursor`, `sort` (`field` or `-field` for descending, default `-created_at`), `include_total`.
+Query parameters: `limit` (1–100, default 20), `cursor`, `sort` (`field` or `-field` for descending), `include_total`.
 
-Sortable fields for work items: `created_at`, `status`, `resource_cleanup_status`, `claimed_at`, `completed_at`, `id`.
+Work items default to `-created_at` (newest first). Sortable fields are `created_at`, `status`, `resource_cleanup_status`, and `id`. Nullable timestamps `claimed_at` and `completed_at` are not sortable.
+
+Clusters and execution targets default to `created_at` (oldest first) and accept only `created_at` or `-created_at`. Unsupported sorts return HTTP 422.
+
+Follow `next` or `prev` to navigate in either direction. Keep the same `sort` and `limit` when following a cursor; its sort field and direction must match the requested sort (including the endpoint default when `sort` is omitted). A missing page in either direction is represented by a null cursor. Totals are computed only when `include_total=true`.
+
+Cursors are base64-encoded JSON objects containing string fields `id`, `created_at`, `direction`, `sort_field`, `sort_direction`, and `sort_value`. Invalid or incomplete cursors, including timestamps without a timezone, return HTTP 422. Unknown cursor fields are ignored.
 
 ```
 GET /api/execution_plane/v1/work_items?limit=50&sort=status
