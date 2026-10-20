@@ -207,7 +207,7 @@ Manager will need the same construction from Cluster credentials. Do not bury
 it inside the probe as a private helper that the Worker Manager cannot import.
 
 `ClusterStore.get()` redacts `api_key`. The monitor loop should use the explicit
-credential-read capability (for example `ClusterCredentialStore.get_with_credentials`).
+credential-read capability (for example `ClusterStore.get_with_credentials`).
 
 #### TLS
 

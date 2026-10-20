@@ -12,8 +12,8 @@ from execution_plane.models.execution_target import BackendType
 if TYPE_CHECKING:
     import uuid
 
-    from execution_plane.cluster.ports import ClusterRegistrationStore
-    from execution_plane.execution_target.ports import ExecutionTargetRegistrationStore
+    from execution_plane.cluster.cluster_store import ClusterStore
+    from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
     from execution_plane.models.execution_target import ExecutionTarget
     from execution_plane.models.execution_target_placement import ExecutionTargetPlacement
 
@@ -87,11 +87,11 @@ class ClusterRegistrar:
 
     def __init__(
         self,
-        store: ClusterRegistrationStore,
-        execution_targets: ExecutionTargetRegistrationStore,
+        store: ClusterStore,
+        execution_targets: ExecutionTargetStore,
         discovery: DiscoveryMechanism,
     ) -> None:
-        """Use actor-specific ports for persistence and registration."""
+        """Use Cluster and ExecutionTarget stores for persistence and registration."""
         self._store = store
         self._execution_targets = execution_targets
         self._discovery = discovery

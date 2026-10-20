@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import and_, or_, select
@@ -18,9 +17,6 @@ from execution_plane.execution_target.execution_target_store import ExecutionTar
 from execution_plane.models.cluster import Cluster, ClusterStatus
 from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane.models.execution_target_placement import KubernetesPlacement
-
-if TYPE_CHECKING:
-    from execution_plane.cluster.ports import ClusterBindingReconcilerStore
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -35,9 +31,9 @@ class ClusterBindingReconciler:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         cluster_registrar: ClusterRegistrar,
-        cluster_store: ClusterBindingReconcilerStore,
+        cluster_store: ClusterStore,
     ) -> None:
-        """Use a short-lived session factory and actor-specific Cluster ports."""
+        """Use a short-lived session factory, registrar, and Cluster store."""
         self._session_factory = session_factory
         self._registrar = cluster_registrar
         self._store = cluster_store

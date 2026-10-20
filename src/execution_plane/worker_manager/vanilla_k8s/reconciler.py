@@ -19,11 +19,11 @@ from execution_plane.models.execution_target_placement import KubernetesPlacemen
 from execution_plane.store_errors import StaleClaimError
 
 if TYPE_CHECKING:
-    from execution_plane.cluster.ports import ClusterCredentialStore
-    from execution_plane.execution_target.ports import ExecutionTargetCleanupStore
+    from execution_plane.cluster.cluster_store import ClusterStore
+    from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
     from execution_plane.models.cluster import Cluster
     from execution_plane.models.execution_target import ExecutionTarget
-    from execution_plane.work_item.ports import WorkProgressStore
+    from execution_plane.work_item.work_item_store import WorkStore
 
 logger = structlog.stdlib.get_logger(__name__)
 _ORPHAN_GRACE = timedelta(minutes=10)
@@ -117,19 +117,19 @@ def _reconcile_target(config_values: dict[str, str], namespace: str) -> list[tup
 
 
 async def run_orphan_policy_reconciler(  # noqa: C901 - isolate cleanup failures per target and item
-    target_cleanup: ExecutionTargetCleanupStore,
-    cluster_credentials: ClusterCredentialStore,
-    work_progress: WorkProgressStore,
+    target_store: ExecutionTargetStore,
+    cluster_store: ClusterStore,
+    work_store: WorkStore,
 ) -> None:
     """Periodically clean up aged policies left by a worker crash or API outage."""
     while True:
         try:
-            targets = await target_cleanup.list()
+            targets = await target_store.list()
             for target_stub in targets:
-                target = await target_cleanup.get_with_credentials(target_stub.id)
+                target = await target_store.get_with_credentials(target_stub.id)
                 if target is None:
                     continue
-                cluster = await cluster_credentials.get_with_credentials(target.cluster_id)
+                cluster = await cluster_store.get_with_credentials(target.cluster_id)
                 if cluster is None:
                     continue
                 connection = _target_config(target, cluster)
@@ -139,7 +139,7 @@ async def run_orphan_policy_reconciler(  # noqa: C901 - isolate cleanup failures
                 removed = await asyncio.to_thread(_reconcile_target, config_values, namespace)
                 for item_id, resource_name, generation in removed:
                     try:
-                        await work_progress.update_backend_resource(
+                        await work_store.update_backend_resource(
                             UUID(item_id),
                             resource_name=resource_name,
                             resource_uid=None,

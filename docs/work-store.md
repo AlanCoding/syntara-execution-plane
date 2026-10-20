@@ -1,48 +1,38 @@
-# Execution Plane: Work Store and Actor Services
+# Execution Plane: Work Store and Scheduler
 
-`WorkStore` is the transactional repository for `WorkItem` and
-`CompletionEvent` records. Work consumers use actor-specific ports and services
-rather than a single record-shaped facade.
+`WorkStore` is the concrete persistence API for `WorkItem` records and their
+existing completion outbox. Consumers depend directly on `WorkStore`.
+`WorkScheduler` coordinates claiming work and resolving its placement.
 
 **Sources:** `src/execution_plane/work_item/work_item_store.py`,
-`src/execution_plane/work_item/ports.py`,
 `src/execution_plane/work_item/work_scheduler.py`,
 `src/execution_plane/work_item/policy.py`, and
 `src/execution_plane/models/work_item.py`
 
-## Boundary
+## Responsibilities
 
-| Layer | Responsibility |
+| Class | Responsibility |
 |---|---|
-| `WorkCommandStore` / `WorkQueryStore` | Authenticated command submission/cancellation and client-scoped REST reads |
+| `WorkStore` | Work commands, client-scoped reads, lifecycle transitions, completion delivery state, and target-drain checks |
 | `WorkScheduler` | Claims queued Work, resolves placement, revalidates candidates, and assigns or releases the claim |
-| `WorkProgressStore` | Worker-owned dispatch, resource, result, uncertain-outcome, and requeue transitions |
-| `CompletionEventStore` | Reads the due completion-outbox batch and records delivery attempts |
-| `TargetDrainStore` | Exposes the Work-owned target-drain predicate |
-| `WorkStore` | Implements every actor port with SQLAlchemy sessions, row locks, commits, and atomic transitions |
-| Work policy | Pure status, reason-bound, and retry-delay rules shared by services and Store transitions |
 
-Command handlers and REST resource queries are composition roots: they construct
-`WorkStore` and use its narrow command/query ports directly. The worker
-constructs `WorkStore` once and wires its scheduler, progress, outbox, and drain
-ports to the actors that need them. No consumer receives the complete Work
-Store contract unless it is a composition root.
+Command handlers and REST resource queries construct `WorkStore` directly.
+The worker constructs one `WorkStore` and shares it with the scheduler, worker
+managers, Completion Notifier, and drain monitor. Each method signature is
+defined on the concrete store, without separate consumer-specific interfaces.
+Completion-event persistence stays in `WorkStore`; there is no separate
+completion store.
 
-## Actor contracts
+## Scheduling and execution
 
-`WorkScheduler` exposes `claim_and_place_work()`. It combines reservation,
-placement, no-match failure, candidate revalidation, assignment, and claim
-release so callers cannot observe or leak a half-placed reservation.
+`WorkScheduler.claim_and_place_work()` combines reservation, placement,
+no-match failure, candidate revalidation, assignment, and claim release.
+Reclaimed work that already has an assigned target is returned for execution
+without repeating placement.
 
-Worker managers, the worker loop, and the Kubernetes reconciler depend on
-`WorkProgressStore`. `WorkStore` enforces terminal-result status policy, bounded
-uncertain-outcome explanations, and claim fencing inside those transitions.
-
-The Completion Notifier depends on `CompletionEventStore`. `WorkStore` rejects
-negative retry delays before touching the outbox.
-
-`WorkStore.is_target_drained` remains the Work-owned predicate used by
-`DrainMonitor`; that consumer depends on `TargetDrainStore`, not the full Store.
+`WorkStore` enforces terminal-result status policy, bounded uncertain-outcome
+explanations, claim fencing, and non-negative completion retry delays.
+`WorkStore.is_target_drained` is the predicate used by `DrainMonitor`.
 
 ## Persistence invariants
 
@@ -56,7 +46,6 @@ negative retry delays before touching the outbox.
 - Lease-expired uncertain work is moved to `RECONCILIATION_REQUIRED` with a durable event.
 
 The Store does not expose generic entity mutation. Every method represents an
-allowed persistence transition and belongs to an actor-specific port.
-`ExecutionTargetStore.finalize_delete` owns the narrow cross-aggregate
-transition that atomically rechecks active work and detaches historical work
-while deleting a drained target.
+allowed persistence transition.
+`ExecutionTargetStore.finalize_delete` atomically rechecks active work and
+detaches historical work while deleting a drained target.

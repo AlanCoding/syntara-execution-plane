@@ -972,7 +972,7 @@ async def test_requeue_pre_execute_failure_returns_dispatched_work() -> None:
 
 @pytest.mark.asyncio
 async def test_completion_retry_rejects_negative_delay() -> None:
-    """The outbox port rejects retry schedules before opening a session."""
+    """The Work store rejects retry schedules before opening a session."""
     store = _store()
     session = _Session()
     store._session_factory = _SessionFactory(session)

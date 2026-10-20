@@ -16,13 +16,13 @@ if TYPE_CHECKING:
     from execution_plane.models.cluster import Cluster
     from execution_plane.models.execution_target import ExecutionTarget
     from execution_plane.models.work_item import WorkItem
-    from execution_plane.work_item.ports import WorkSchedulingStore
+    from execution_plane.work_item.work_item_store import WorkStore
 
 
 class WorkScheduler:
     """Claim queued Work and assign an eligible ExecutionTarget."""
 
-    def __init__(self, store: WorkSchedulingStore, placement_resolver: PlacementResolver) -> None:
+    def __init__(self, store: WorkStore, placement_resolver: PlacementResolver) -> None:
         """Use transactional claim transitions and the placement policy."""
         self._store = store
         self._placement_resolver = placement_resolver
@@ -30,8 +30,8 @@ class WorkScheduler:
     async def claim_and_place_work(self) -> WorkItem | None:
         """Claim one item and place it, returning only assigned Work."""
         item = await self._store.reserve_one()
-        if item is None:
-            return None
+        if item is None or item.execution_target_id is not None:
+            return item
         return await self._place_claimed_item(item)
 
     async def _place_claimed_item(self, item: WorkItem) -> WorkItem | None:

@@ -8,13 +8,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlmodel import col
 
-from execution_plane.cluster.ports import (
-    ClusterCredentialStore,
-    ClusterLifecycleStore,
-    ClusterQueryStore,
-    ClusterRegistrationStore,
-    ClusterSourceBindingStore,
-)
 from execution_plane.labels import labels_with_cluster_id, merge_user_labels
 from execution_plane.models.cluster import Cluster, ClusterStatus, ClusterType
 from execution_plane.models.cluster_binding import ClusterBinding
@@ -34,14 +27,7 @@ class ClusterNotFoundError(LookupError):
         super().__init__(f"Cluster {cluster_id} does not exist")
 
 
-class ClusterStore(
-    StoreBase,
-    ClusterRegistrationStore,
-    ClusterQueryStore,
-    ClusterCredentialStore,
-    ClusterSourceBindingStore,
-    ClusterLifecycleStore,
-):
+class ClusterStore(StoreBase):
     """Persist Cluster state and own the database resources it uses."""
 
     @staticmethod

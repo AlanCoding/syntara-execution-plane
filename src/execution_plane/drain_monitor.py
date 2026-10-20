@@ -13,9 +13,9 @@ from execution_plane.models.execution_target import TargetStatus
 if TYPE_CHECKING:
     import uuid
 
-    from execution_plane.cluster.ports import ClusterLifecycleStore
-    from execution_plane.execution_target.ports import ExecutionTargetDrainStore
-    from execution_plane.work_item.ports import TargetDrainStore
+    from execution_plane.cluster.cluster_store import ClusterStore
+    from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
+    from execution_plane.work_item.work_item_store import WorkStore
 
 
 logger = structlog.stdlib.get_logger(__name__)
@@ -26,15 +26,15 @@ class DrainMonitor:
 
     def __init__(
         self,
-        target_drain: ExecutionTargetDrainStore,
-        cluster_lifecycle: ClusterLifecycleStore,
-        work_store: TargetDrainStore,
+        target_store: ExecutionTargetStore,
+        cluster_store: ClusterStore,
+        work_store: WorkStore,
         poll_interval: float = 1.0,
         monitor_interval: float = 1.0,
     ) -> None:
         """Create a monitor using the long-lived persistence stores."""
-        self._target_drain = target_drain
-        self._cluster_lifecycle = cluster_lifecycle
+        self._target_store = target_store
+        self._cluster_store = cluster_store
         self._work_store = work_store
         self._poll_interval = poll_interval
         self._monitor_interval = monitor_interval
@@ -66,7 +66,7 @@ class DrainMonitor:
         task = self._tasks.get(cluster_id)
         if task is not None and not task.done():
             return
-        targets = await self._target_drain.list(cluster_id=cluster_id)
+        targets = await self._target_store.list(cluster_id=cluster_id)
         for target in targets:
             target_task = self._tasks.get(target.id)
             if target_task is not None and not target_task.done():
@@ -107,11 +107,11 @@ class DrainMonitor:
 
     async def _scan_draining(self) -> None:
         """Schedule workers for all persisted draining resources."""
-        clusters = await self._cluster_lifecycle.list(status=ClusterStatus.DRAINING)
+        clusters = await self._cluster_store.list(status=ClusterStatus.DRAINING)
         cluster_ids = {cluster.id for cluster in clusters}
         for cluster in clusters:
             await self._schedule_cluster(cluster.id, cluster.updated_by)
-        targets = await self._target_drain.list(status=TargetStatus.DRAINING)
+        targets = await self._target_store.list(status=TargetStatus.DRAINING)
         for target in targets:
             if target.cluster_id not in cluster_ids:
                 self._schedule_target(target.id, target.updated_by)
@@ -119,29 +119,29 @@ class DrainMonitor:
     async def _drain_target(self, target_id: uuid.UUID, updated_by: uuid.UUID) -> None:
         try:
             await self._wait_until_drained(target_id)
-            if await self._target_drain.get(target_id) is not None:
-                await self._target_drain.finalize_delete(target_id)
+            if await self._target_store.get(target_id) is not None:
+                await self._target_store.finalize_delete(target_id)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
             try:
-                await self._target_drain.mark_failed(target_id, updated_by)
+                await self._target_store.mark_failed(target_id, updated_by)
             except Exception:  # noqa: BLE001
                 return
 
     async def _drain_cluster(self, cluster_id: uuid.UUID, updated_by: uuid.UUID) -> None:
         try:
-            targets = await self._target_drain.list(cluster_id=cluster_id)
+            targets = await self._target_store.list(cluster_id=cluster_id)
             for target in targets:
                 await self._wait_until_drained(target.id)
-                if await self._target_drain.get(target.id) is not None:
-                    await self._target_drain.finalize_delete(target.id)
-            await self._cluster_lifecycle.finalize_delete(cluster_id)
+                if await self._target_store.get(target.id) is not None:
+                    await self._target_store.finalize_delete(target.id)
+            await self._cluster_store.finalize_delete(cluster_id)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
             try:
-                await self._cluster_lifecycle.mark_drain_failed(cluster_id, "cluster drain failed", updated_by)
+                await self._cluster_store.mark_drain_failed(cluster_id, "cluster drain failed", updated_by)
             except Exception:  # noqa: BLE001
                 return
 

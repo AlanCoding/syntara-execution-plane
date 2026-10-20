@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
+import pytest
+
 from execution_plane.execution_target_reconciler.types import (
     ClusterSnapshot,
     ExecutionTargetSnapshot,
@@ -169,6 +171,25 @@ class _WorkStore:
         assert claim_generation == self.item.claim_generation
         self.released_claims.append((claim_owner_id, claim_generation))
         return True
+
+
+@pytest.mark.parametrize("targets_available", [True, False])
+async def test_reclaimed_work_keeps_existing_target(targets_available):
+    cluster = _cluster()
+    target = _target(cluster)
+    item = _reserved_item()
+    item.execution_target_id = target.id
+    store = _WorkStore(item, {target.id: (cluster, target)})
+    candidates = [_snapshot(cluster, target)] if targets_available else []
+    outcome = ResolveOutcome.MATCHED if targets_available else ResolveOutcome.NO_MATCHING_TARGETS
+    resolver = _PlacementResolver(ReconcileResult(candidates, [], outcome))
+
+    assert await WorkScheduler(store, resolver).claim_and_place_work() is item
+
+    assert resolver.requirements == []
+    assert store.assigned_target_ids == []
+    assert store.released_claims == []
+    assert store.results == []
 
 
 async def test_no_matching_target_fails_claimed_work():

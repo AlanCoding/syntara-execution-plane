@@ -17,10 +17,9 @@ class EPResourceQueries:
 
     def __init__(self, engine: AsyncEngine, client_id: str) -> None:
         """Borrow the API's engine and verified client identity."""
-        target_queries = ExecutionTargetStore.from_engine(engine)
         self._clusters = ClusterStore.from_engine(engine)
         self._work = WorkStore.from_engine(engine)
-        self._targets = target_queries
+        self._targets = ExecutionTargetStore.from_engine(engine)
         self._client_id = client_id
 
     async def work_items(self, limit: int) -> list[WorkItemRead]:

@@ -9,16 +9,6 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
 
-from execution_plane.execution_target.ports import (
-    ExecutionTargetCleanupStore,
-    ExecutionTargetClientQueryStore,
-    ExecutionTargetCommandStore,
-    ExecutionTargetCredentialStore,
-    ExecutionTargetDrainStore,
-    ExecutionTargetLookupStore,
-    ExecutionTargetRegistrationStore,
-    ExecutionTargetSnapshotStore,
-)
 from execution_plane.labels import labels_with_execution_target_id, merge_user_labels
 from execution_plane.models.cluster import Cluster, ClusterStatus
 from execution_plane.models.execution_target import BackendType, ExecutionTarget, TargetStatus
@@ -55,17 +45,7 @@ class ClusterNotAvailableError(ValueError):
     """Raised when a target is created for a Cluster that cannot accept targets."""
 
 
-class ExecutionTargetStore(
-    StoreBase,
-    ExecutionTargetClientQueryStore,
-    ExecutionTargetCleanupStore,
-    ExecutionTargetCommandStore,
-    ExecutionTargetCredentialStore,
-    ExecutionTargetDrainStore,
-    ExecutionTargetLookupStore,
-    ExecutionTargetRegistrationStore,
-    ExecutionTargetSnapshotStore,
-):
+class ExecutionTargetStore(StoreBase):
     """Persist execution targets and own their database resources."""
 
     @staticmethod

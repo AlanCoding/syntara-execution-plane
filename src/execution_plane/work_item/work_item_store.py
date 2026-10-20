@@ -30,14 +30,6 @@ from execution_plane.work_item.policy import (
     require_terminal_result_status,
     validate_completion_retry_delay,
 )
-from execution_plane.work_item.ports import (
-    CompletionEventStore,
-    TargetDrainStore,
-    WorkCommandStore,
-    WorkProgressStore,
-    WorkQueryStore,
-    WorkSchedulingStore,
-)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -47,15 +39,7 @@ if TYPE_CHECKING:
 _NOTIFY_CHANNEL = "execution_plane_work_items"
 
 
-class WorkStore(
-    StoreBase,
-    WorkCommandStore,
-    WorkQueryStore,
-    WorkSchedulingStore,
-    WorkProgressStore,
-    CompletionEventStore,
-    TargetDrainStore,
-):
+class WorkStore(StoreBase):
     """Persist work item lifecycle transitions and own database resources."""
 
     async def dispatch(
