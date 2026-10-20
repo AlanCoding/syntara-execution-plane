@@ -27,9 +27,6 @@ completion store.
 
 `WorkScheduler.claim_and_place_work()` combines reservation, placement,
 no-match failure, candidate revalidation, assignment, and claim release.
-Reclaimed work that already has an assigned target is returned for execution
-without repeating placement.
-
 `WorkStore` enforces terminal-result status policy, bounded uncertain-outcome
 explanations, claim fencing, and non-negative completion retry delays.
 `WorkStore.is_target_drained` is the predicate used by `DrainMonitor`.

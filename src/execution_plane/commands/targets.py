@@ -34,6 +34,7 @@ class TargetCommandHandler:
         sessions = async_sessionmaker(context.engine, expire_on_commit=False)
         async with sessions.begin() as session:
             target_store = ExecutionTargetStore.from_transaction(session)
+            target_commands = target_store
             if isinstance(payload, TargetRegister):
                 cluster = await session.get(Cluster, payload.cluster_id, with_for_update=True)
                 if cluster is None or cluster.source_client_id != context.client_id:
@@ -42,7 +43,7 @@ class TargetCommandHandler:
                     raise DefaultExecutionTargetError
                 if await session.get(ExecutionTarget, resource_id) is not None:
                     raise ProtocolConflict
-                await target_store.create(
+                await target_commands.create(
                     cluster_id=payload.cluster_id,
                     name=payload.name,
                     backend_type=BackendType(payload.backend_type),
@@ -54,7 +55,7 @@ class TargetCommandHandler:
                     labels=payload.labels,
                     target_id=resource_id,
                 )
-                await target_store.activate(resource_id, SYSTEM_ACTOR)
+                await target_commands.activate(resource_id, SYSTEM_ACTOR)
             else:
                 target = await session.get(ExecutionTarget, resource_id, with_for_update=True)
                 if target is None:
@@ -65,13 +66,13 @@ class TargetCommandHandler:
                 if target.is_default:
                     raise DefaultExecutionTargetError
                 if isinstance(payload, TargetDelete):
-                    await target_store.request_delete(resource_id, SYSTEM_ACTOR)
+                    await target_commands.request_delete(resource_id, SYSTEM_ACTOR)
                 else:
                     if any(getattr(payload, key) is None for key in payload.model_fields_set):
                         raise ProtocolConflict
                     if payload.placement is not None and payload.placement.type != target.placement.type:
                         raise ProtocolConflict
-                    await target_store.update(
+                    await target_commands.update(
                         resource_id,
                         updated_by=SYSTEM_ACTOR,
                         name=payload.name,

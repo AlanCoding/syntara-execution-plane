@@ -53,10 +53,10 @@ def execution_target_snapshot_from_model(
 class ExecutionTargetSnapshotSourceAdapter(ExecutionTargetSnapshotSource):
     """`ExecutionTargetSnapshotSource` Protocol backed by Cluster and target stores."""
 
-    def __init__(self, cluster_store: ClusterStore, target_store: ExecutionTargetStore) -> None:
+    def __init__(self, cluster_queries: ClusterStore, target_snapshots: ExecutionTargetStore) -> None:
         """Load Clusters first so every target of a Cluster shares one snapshot instance."""
-        self._clusters = cluster_store
-        self._targets = target_store
+        self._clusters = cluster_queries
+        self._targets = target_snapshots
 
     async def list(self) -> Sequence[ExecutionTargetSnapshot]:
         """Return all targets with interned Cluster backrefs. Orphans with no Cluster are omitted."""
@@ -69,23 +69,23 @@ class ExecutionTargetSnapshotSourceAdapter(ExecutionTargetSnapshotSource):
 
 
 def store_backed_snapshot_source(
-    cluster_store: ClusterStore,
-    target_store: ExecutionTargetStore,
+    cluster_queries: ClusterStore,
+    target_snapshots: ExecutionTargetStore,
 ) -> ExecutionTargetSnapshotSourceAdapter:
     """Build a flat target source that interns ClusterSnapshot instances."""
-    return ExecutionTargetSnapshotSourceAdapter(cluster_store, target_store)
+    return ExecutionTargetSnapshotSourceAdapter(cluster_queries, target_snapshots)
 
 
 def build_placement_resolver(
-    cluster_store: ClusterStore,
-    target_store: ExecutionTargetStore,
+    cluster_queries: ClusterStore,
+    target_snapshots: ExecutionTargetStore,
     worker_managers: WorkerManagerRegistry | None = None,
     filters: Sequence[EligibilityFilter] | None = None,
 ) -> PlacementResolver:
     """Construct the co-located PlacementResolver used by the worker process."""
     return PlacementResolver(
         ExecutionTargetReconciler(
-            store_backed_snapshot_source(cluster_store, target_store),
+            store_backed_snapshot_source(cluster_queries, target_snapshots),
             filters or default_filters(),
         ),
         worker_managers or WorkerManagerRegistry(),

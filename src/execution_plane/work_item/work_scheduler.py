@@ -30,8 +30,8 @@ class WorkScheduler:
     async def claim_and_place_work(self) -> WorkItem | None:
         """Claim one item and place it, returning only assigned Work."""
         item = await self._store.reserve_one()
-        if item is None or item.execution_target_id is not None:
-            return item
+        if item is None:
+            return None
         return await self._place_claimed_item(item)
 
     async def _place_claimed_item(self, item: WorkItem) -> WorkItem | None:
