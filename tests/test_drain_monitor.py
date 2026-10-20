@@ -55,6 +55,7 @@ def _cluster() -> Cluster:
 
 class _TargetStore:
     def __init__(self, targets: list[ExecutionTarget]) -> None:
+        self.store = self
         self.targets = targets
         self.finalized: list[uuid.UUID] = []
         self.failed: list[uuid.UUID] = []
@@ -75,6 +76,7 @@ class _TargetStore:
 
 class _ClusterStore:
     def __init__(self, clusters: list[Cluster]) -> None:
+        self.store = self
         self.clusters = clusters
         self.finalized: list[uuid.UUID] = []
         self.failed: list[uuid.UUID] = []
@@ -102,6 +104,7 @@ class _ClusterStore:
 
 class _WorkStore:
     def __init__(self, *, drained: bool) -> None:
+        self.store = self
         self.drained = drained
 
     async def is_target_drained(self, _target_id: uuid.UUID) -> bool:
@@ -138,6 +141,9 @@ async def test_monitor_stop_cancels_a_waiting_drain_task() -> None:
         return True
 
     class WaitingWorkStore:
+        def __init__(self) -> None:
+            self.store = self
+
         async def is_target_drained(self, target_id: uuid.UUID) -> bool:
             return await is_drained(target_id)
 
@@ -420,6 +426,7 @@ async def test_monitor_polls_until_work_for_a_target_is_drained() -> None:
 
     class EventuallyDrainedWorkStore:
         def __init__(self) -> None:
+            self.store = self
             self.calls = 0
 
         async def is_target_drained(self, _target_id: uuid.UUID) -> bool:

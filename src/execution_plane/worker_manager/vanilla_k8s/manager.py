@@ -92,7 +92,7 @@ class VanillaK8sWorkerManager:
             message = "Work item has no execution target assigned"
             raise RetryableDispatchError(message)
         # include_secret=True: the manager needs the API token to reach the cluster.
-        target = await self._target_service.get(work_item.execution_target_id, include_secret=True)
+        target = await self._target_service.store.get(work_item.execution_target_id, include_secret=True)
         if target is None or not target.enabled:
             message = "Assigned execution target is unavailable"
             raise RetryableDispatchError(message)
@@ -107,7 +107,7 @@ class VanillaK8sWorkerManager:
         if output_config is not None and not isinstance(output_config, dict):
             message = "Work item payload has an invalid 'output_config'"
             raise WorkItemPayloadError(message)
-        cluster = await self._cluster_service.get(target.cluster_id, include_secret=True)
+        cluster = await self._cluster_service.store.get(target.cluster_id, include_secret=True)
         if cluster is None or not cluster.enabled:
             message = "Assigned cluster is unavailable"
             raise RetryableDispatchError(message)
@@ -203,7 +203,7 @@ class VanillaK8sWorkerManager:
             while not transport_task.done():
                 done, _pending = await asyncio.wait({transport_task}, timeout=5)
                 if not done:
-                    cancellation_requested = await self._work_service.refresh_claim(
+                    cancellation_requested = await self._work_service.store.refresh_claim(
                         work_item.id,
                         claim_owner_id=work_item.claim_owner_id,
                         claim_generation=work_item.claim_generation,

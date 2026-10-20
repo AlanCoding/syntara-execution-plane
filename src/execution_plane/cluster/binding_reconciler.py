@@ -77,7 +77,7 @@ class ClusterBindingReconciler:
     async def _reconcile(self, binding: ClusterBinding) -> None:
         """Apply one desired state and persist only if the revision is still current."""
         try:
-            cluster = await self._service.get_by_source(binding.client_id, binding.source_integration_id)
+            cluster = await self._service.store.get_by_source(binding.client_id, binding.source_integration_id)
             if not binding.enabled:
                 status = await self._reconcile_delete(cluster)
                 cluster_id = None if cluster is None else cluster.id
@@ -131,7 +131,7 @@ class ClusterBindingReconciler:
                 source_revision=binding.revision,
                 project_ids=binding.project_ids,
             )
-            created = await self._service.update_source_binding(
+            created = await self._service.store.update_source_binding(
                 created.id,
                 client_id=binding.client_id,
                 integration_id=binding.source_integration_id,
@@ -164,7 +164,7 @@ class ClusterBindingReconciler:
             placement=KubernetesPlacement(namespace=binding.namespace),
             labels=binding.labels,
         )
-        current = await self._service.update_source_binding(
+        current = await self._service.store.update_source_binding(
             current.id,
             client_id=binding.client_id,
             integration_id=binding.source_integration_id,
@@ -179,7 +179,7 @@ class ClusterBindingReconciler:
         if cluster is None:
             return "deleted"
         if cluster.status is not ClusterStatus.DRAINING:
-            await self._service.request_delete(cluster.id, SYSTEM_ACTOR_ID)
+            await self._service.store.request_delete(cluster.id, SYSTEM_ACTOR_ID)
         return "deleting"
 
 

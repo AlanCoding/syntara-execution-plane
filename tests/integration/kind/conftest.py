@@ -100,10 +100,10 @@ async def ep_cluster(migrated_database: str) -> AsyncGenerator[Cluster, None]:
 
     finally:
         if cluster is not None:
-            await cluster_service.request_delete(cluster.id, _CLI_ACTOR_ID)
-            for target in await target_service.list(cluster_id=cluster.id):
-                await target_service.finalize_delete(target.id)
-            await cluster_service.finalize_delete(cluster.id)
+            await cluster_service.store.request_delete(cluster.id, _CLI_ACTOR_ID)
+            for target in await target_service.store.list(cluster_id=cluster.id):
+                await target_service.store.finalize_delete(target.id)
+            await cluster_service.store.finalize_delete(cluster.id)
         await cluster_store.close()
         await target_store.close()
 

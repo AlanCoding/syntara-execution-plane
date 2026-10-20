@@ -53,7 +53,7 @@ class CompletionNotifier:
     async def run(self, work_service: WorkItemService) -> None:
         """Continuously retry due outbox records; callback failure never loses results."""
         while True:
-            events = await work_service.get_pending_completion_events()
+            events = await work_service.store.get_pending_completion_events()
             if not events:
                 await asyncio.sleep(DELIVERY_POLL_SECONDS)
                 continue

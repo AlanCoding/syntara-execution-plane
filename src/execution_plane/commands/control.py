@@ -21,7 +21,7 @@ class CancelCommandHandler:
         if not isinstance(payload, CancelCommand):
             raise UnsupportedCommand
         work_service = WorkItemService(WorkStore.from_engine(context.engine))
-        item = await work_service.request_cancel(
+        item = await work_service.store.request_cancel(
             payload.target_command_id,
             client_id=context.client_id,
         )

@@ -124,12 +124,12 @@ async def run_orphan_policy_reconciler(  # noqa: C901 - isolate cleanup failures
     """Periodically clean up aged policies left by a worker crash or API outage."""
     while True:
         try:
-            targets = await target_service.list()
+            targets = await target_service.store.list()
             for target_stub in targets:
-                target = await target_service.get(target_stub.id, include_secret=True)
+                target = await target_service.store.get(target_stub.id, include_secret=True)
                 if target is None:
                     continue
-                cluster = await cluster_service.get(target.cluster_id, include_secret=True)
+                cluster = await cluster_service.store.get(target.cluster_id, include_secret=True)
                 if cluster is None:
                     continue
                 connection = _target_config(target, cluster)

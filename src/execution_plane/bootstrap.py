@@ -70,9 +70,9 @@ async def bootstrap_local_cluster(
     ):
         target_service = ExecutionTargetService(target_store)
         cluster_service = ClusterService(cluster_store, target_service, discovery)
-        clusters = await cluster_service.list()
+        clusters = await cluster_service.store.list()
         for candidate in clusters:
-            targets = await target_service.list(cluster_id=candidate.id)
+            targets = await target_service.store.list(cluster_id=candidate.id)
             if _is_healthy(candidate, targets):
                 return candidate
 
@@ -85,12 +85,12 @@ async def bootstrap_local_cluster(
                 created_by,
                 cluster_type=ClusterType.OPENSHIFT,
             )
-            targets = await target_service.list(cluster_id=cluster.id)
+            targets = await target_service.store.list(cluster_id=cluster.id)
             if _is_healthy(cluster, targets):
                 return cluster
             raise LocalClusterBootstrapError(cluster.status)
 
-        targets = await target_service.list(cluster_id=cluster.id)
+        targets = await target_service.store.list(cluster_id=cluster.id)
         if _is_healthy(cluster, targets):
             return cluster
         if targets or not cluster.enabled or cluster.status is not ClusterStatus.REGISTERING:
@@ -98,7 +98,7 @@ async def bootstrap_local_cluster(
 
         result = discovery.discover(ClusterRegistration(LOCAL_CLUSTER_NAME, LOCAL_CLUSTER_ENDPOINT, "", {}))
         target = result.targets[0]
-        created_target = await target_service.create(
+        created_target = await target_service.store.create(
             cluster_id=cluster.id,
             name=target.name,
             backend_type=target.backend_type,
@@ -108,8 +108,8 @@ async def bootstrap_local_cluster(
             is_default=target.is_default,
             created_by=created_by,
         )
-        await target_service.activate(created_target.id, created_by)
-        return await cluster_service.record_discovery_state(
+        await target_service.store.activate(created_target.id, created_by)
+        return await cluster_service.store.record_discovery_state(
             cluster.id,
             ClusterStatus.ACTIVE,
             None,

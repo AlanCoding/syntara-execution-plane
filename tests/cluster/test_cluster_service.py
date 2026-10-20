@@ -312,6 +312,7 @@ class _TargetService:
         fail_named: str | None = None,
         targets: list[ExecutionTarget] | None = None,
     ) -> None:
+        self.store = self
         self.fail_default = fail_default
         self.fail_named = fail_named
         self.created: list[dict[str, object]] = []
@@ -388,7 +389,7 @@ async def test_service_lists_cluster_bindings_for_the_authenticated_client() -> 
     store.binding = binding
     service = ClusterService(store, _TargetService(), _Discovery(object()))  # type: ignore[arg-type]
 
-    result = await service.list_bindings_for_client("client-a", limit=20)
+    result = await service.store.list_bindings_for_client("client-a", limit=20)
 
     assert result == [binding]
     assert store.binding_queries == [("client-a", 20)]
@@ -415,7 +416,7 @@ async def test_service_reads_one_cluster_binding_for_the_authenticated_client() 
     store.binding = binding
     service = ClusterService(store, _TargetService(), _Discovery(object()))  # type: ignore[arg-type]
 
-    result = await service.get_binding_for_client("client-a", integration_id)
+    result = await service.store.get_binding_for_client("client-a", integration_id)
 
     assert result is binding
     assert store.binding_queries == [("client-a", integration_id)]
@@ -598,7 +599,7 @@ async def test_service_persists_cluster_drain_request() -> None:
     service = ClusterService(store, _TargetService(), _Discovery(object()))  # type: ignore[arg-type]
 
     actor_id = uuid.uuid4()
-    result = await service.request_delete(cluster.id, actor_id)
+    result = await service.store.request_delete(cluster.id, actor_id)
 
     assert result.status is ClusterStatus.DRAINING
 
@@ -675,8 +676,8 @@ async def test_service_delegates_get_and_list_to_the_cluster_store() -> None:
     cluster = _cluster()
     service = ClusterService(_ClusterStore(cluster), _TargetService(), _Discovery(object()))  # type: ignore[arg-type]
 
-    assert await service.get(cluster.id) is cluster
-    assert await service.list(status=ClusterStatus.ACTIVE, enabled=True) == [cluster]
+    assert await service.store.get(cluster.id) is cluster
+    assert await service.store.list(status=ClusterStatus.ACTIVE, enabled=True) == [cluster]
 
 
 @pytest.mark.asyncio

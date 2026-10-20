@@ -48,7 +48,7 @@ def _cluster() -> Cluster:
 async def test_new_binding_namespace_becomes_typed_kubernetes_placement() -> None:
     cluster = _cluster()
     cluster_service = AsyncMock()
-    cluster_service.update_source_binding.return_value = cluster
+    cluster_service.store.update_source_binding.return_value = cluster
     reconciler = ClusterBindingReconciler(AsyncMock(), cluster_service)
     provision = AsyncMock(return_value=cluster)
     reconciler._service.provision = provision
@@ -68,7 +68,7 @@ async def test_binding_update_keeps_namespace_in_request_and_sends_typed_placeme
     binding.labels = {"region": "eu-west"}
     cluster = _cluster()
     cluster_service = AsyncMock()
-    cluster_service.update_source_binding.return_value = cluster
+    cluster_service.store.update_source_binding.return_value = cluster
     reconciler = ClusterBindingReconciler(AsyncMock(), cluster_service)
     sync_update = AsyncMock()
     reconciler._service.sync_update = sync_update

@@ -371,7 +371,7 @@ async def test_failed_target_creation_rolls_back_and_default_targets_are_protect
     async with sessions.begin() as session:
         target_store = ExecutionTargetStore.from_transaction(session)
         target_service = ExecutionTargetService(target_store)
-        default = await target_service.create(
+        default = await target_service.store.create(
             cluster_id=cluster_id,
             name="default",
             backend_type=BackendType.VANILLA_K8S,

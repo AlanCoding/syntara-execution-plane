@@ -142,7 +142,7 @@ async def _first_target(
     target_service: ExecutionTargetService,
     cluster_id: uuid.UUID,
 ) -> ExecutionTarget:
-    targets = await target_service.list(cluster_id=cluster_id)
+    targets = await target_service.store.list(cluster_id=cluster_id)
     assert targets, "Expected the kind fixture to provision an ExecutionTarget"
     return targets[0]
 
@@ -189,7 +189,7 @@ async def _dispatch_item(
     client_id: str,
     invocation: dict[str, object],
 ) -> _DispatchedItem:
-    item = await work_service.dispatch(
+    item = await work_service.store.dispatch(
         client_id=client_id,
         item_id=uuid.uuid4(),
         payload={
@@ -198,7 +198,7 @@ async def _dispatch_item(
         },
     )
 
-    reserved = await work_service.reserve_one()
+    reserved = await work_service.store.reserve_one()
     assert reserved is not None
     assert reserved.id == item.id
     assert reserved.status is WorkItemStatus.CLAIMED
@@ -224,7 +224,7 @@ async def _cancel_processing_task(
         return
 
     with suppress(Exception):
-        await work_service.request_cancel(item_id, client_id=client_id)
+        await work_service.store.request_cancel(item_id, client_id=client_id)
 
     await asyncio.wait({processing_task}, timeout=_DISPATCH_CLEANUP_TIMEOUT_SECONDS)
     if processing_task.done():
@@ -287,7 +287,7 @@ async def test_work_item_dispatched_to_kind_cluster_reaches_completed(ep_cluster
 
             await _process_item(assigned, work_service, target_service, worker_managers, settings)
 
-            final_item = await work_service.get(item.id, client_id=client_id)
+            final_item = await work_service.store.get(item.id, client_id=client_id)
 
     assert final_item is not None
     assert final_item.status is WorkItemStatus.COMPLETED, (
@@ -316,7 +316,7 @@ async def test_work_item_dispatched_to_kind_cluster_includes_node_selector_in_po
         assert isinstance(original_placement, KubernetesPlacement)
         namespace = original_placement.namespace
 
-        await target_service.update(
+        await target_service.store.update(
             target.id,
             updated_by=uuid.uuid4(),
             placement=KubernetesPlacement(
@@ -359,7 +359,7 @@ async def test_work_item_dispatched_to_kind_cluster_includes_node_selector_in_po
                     pod_spec = job.spec.template.spec
                     _assert_pod_spec(pod_spec)
 
-                    dispatched_item = await work_service.get(item.id, client_id=client_id)
+                    dispatched_item = await work_service.store.get(item.id, client_id=client_id)
                     assert dispatched_item is not None
                     assert dispatched_item.status is WorkItemStatus.DISPATCHED
 
@@ -372,9 +372,9 @@ async def test_work_item_dispatched_to_kind_cluster_includes_node_selector_in_po
                         client_id=client_id,
                     )
 
-                final_item = await work_service.get(item.id, client_id=client_id)
+                final_item = await work_service.store.get(item.id, client_id=client_id)
         finally:
-            await target_service.update(
+            await target_service.store.update(
                 target.id,
                 updated_by=uuid.uuid4(),
                 placement=original_placement,
@@ -433,11 +433,11 @@ async def test_work_item_cancel_reaches_cancelled(
                     _JOB_WAIT_TIMEOUT_SECONDS,
                 )
 
-                dispatched_item = await work_service.get(item.id, client_id=client_id)
+                dispatched_item = await work_service.store.get(item.id, client_id=client_id)
                 assert dispatched_item is not None
                 assert dispatched_item.status is WorkItemStatus.DISPATCHED
 
-                cancel_requested = await work_service.request_cancel(item.id, client_id=client_id)
+                cancel_requested = await work_service.store.request_cancel(item.id, client_id=client_id)
                 assert cancel_requested.status is WorkItemStatus.CANCEL_REQUESTED
 
                 await processing_task
@@ -448,7 +448,7 @@ async def test_work_item_cancel_reaches_cancelled(
                     namespace,
                 )
 
-                final_item = await work_service.get(item.id, client_id=client_id)
+                final_item = await work_service.store.get(item.id, client_id=client_id)
             finally:
                 await _cancel_processing_task(
                     work_service,

@@ -185,7 +185,7 @@ async def _placement(
 
 
 async def _reserve_work_item(work_service: WorkItemService, work_id: UUID) -> WorkItem:
-    reserved = await work_service.reserve_one()
+    reserved = await work_service.store.reserve_one()
     assert reserved is not None
     assert reserved.id == work_id
     return reserved

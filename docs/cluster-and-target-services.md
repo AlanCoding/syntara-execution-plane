@@ -216,8 +216,7 @@ The discovery boundary is:
 ClusterService
   -> ClusterStore.create(cluster_definition)
   -> ClusterDiscoveryMechanism.discover(cluster_definition)
-  -> ExecutionTargetService.create(cluster_id, target_definition)
-  -> ExecutionTargetStore.create(...)
+  -> execution_target_service.store.create(cluster_id, target_definition)
 ```
 
 The registration sequence keeps persistence behind the store while leaving
@@ -289,7 +288,7 @@ physical finalization.
 
 ### Cluster deletion
 
-`ClusterService.request_delete(cluster_id)` performs one transaction that:
+`cluster_service.store.request_delete(cluster_id)` performs one transaction that:
 
 1. Loads the Cluster and verifies its existence.
 2. Handles repeated requests according to the API's idempotency convention.
@@ -355,11 +354,11 @@ sequenceDiagram
 ```
 
 `DrainMonitor` owns drain polling in the worker process. It finds draining
-Clusters through `ClusterService`, relies on target eligibility filtering to
-prevent new work, and asks `WorkItemService` whether each target's active
+Clusters through `cluster_service.store`, relies on target eligibility filtering to
+prevent new work, and asks `work_service.store` whether each target's active
 workers and associated work have completed naturally. For each drained target
-it calls `ExecutionTargetService.finalize_delete`. A Cluster is deleted through
-`ClusterService.finalize_delete` only after all related targets have been
+it calls `target_service.store.finalize_delete`. A Cluster is deleted through
+`cluster_service.store.finalize_delete` only after all related targets have been
 removed.
 
 Drain polling runs as asyncio tasks initiated and supervised by `DrainMonitor`.
@@ -381,10 +380,10 @@ operator intervention to resolve.
 2. It marks the target `enabled=False` and `status=DRAINING` in a transaction.
 3. It updates audit fields and returns or exposes the draining state.
 4. It returns without launching a drain task.
-5. `DrainMonitor` observes the draining target and asks `WorkItemService`
+5. `DrainMonitor` observes the draining target and asks `work_service.store`
    whether its active workers and associated work have completed naturally.
 6. After the drained predicate is satisfied, `DrainMonitor` delegates physical
-   deletion to `ExecutionTargetService.finalize_delete`.
+   deletion to `target_service.store.finalize_delete`.
 
 The drained predicate is a worker/lifecycle concern and must account for the
 WorkItem states and worker ownership semantics. Until the predicate is true,
@@ -403,14 +402,14 @@ Outside the Cluster package, production code references `ClusterStore` only in
 composition roots that construct it with `from_engine` or `from_database_url`
 and inject it into `ClusterService`. Every other consumer performs Cluster
 retrieval, listing, source binding, lifecycle, drain, and deletion operations
-through `ClusterService`.
+through its typed `cluster_service.store` attribute.
 
 Outside the ExecutionTarget package, production code references
 `ExecutionTargetStore` only in composition roots that construct it with one of
 its factory methods and inject it into `ExecutionTargetService`. Command
 handlers, workers, worker managers, placement, drain monitoring, and orphan
-reconciliation use `ExecutionTargetService` for target reads, updates,
-lifecycle, drain, and deletion operations.
+reconciliation use the typed `target_service.store` for persistence operations
+and `ExecutionTargetService.request_delete` for deletion policy.
 
 ```mermaid
 flowchart LR
@@ -461,7 +460,7 @@ mechanism and does not create ExecutionTargets.
 
 `ExecutionTargetStore` provides target creation, retrieval, listing with
 optional eligibility filtering, narrow metadata updates, drain requests, and
-physical finalization. `finalize_delete` is callable only after the Service's
+physical finalization. `finalize_delete` is callable only after the
 drain monitor has established that the target is safe to remove.
 
 ### Services
@@ -469,16 +468,15 @@ drain monitor has established that the target is safe to remove.
 Services are the domain-facing layer used by the router, discovery mechanism,
 and drain consumers. They do not accept or expose SQLAlchemy sessions.
 
-`ClusterService` exposes registration, retrieval, administrative listing, and
-graceful deletion. `ExecutionTargetService` exposes manual target
-registration, retrieval, administrative or eligible listing, narrow updates,
-and graceful deletion. Both Services preserve lifecycle state in
-administrative views while selection-oriented operations exclude unavailable
-resources.
+Each Service exposes its injected Store as a typed public `store` attribute.
+Callers use `service.store` for persistence operations, without duplicate
+forwarding methods or interface declarations. `ClusterService` retains
+registration, provisioning, and synchronized Cluster/default-target updates.
+`ExecutionTargetService` retains protected-default deletion validation.
 
-`WorkItemService` is implemented in `execution_plane.work_item` and owns the complete
-Work domain contract. `WorkStore` remains internal to that package as the Work
-persistence boundary.
+`WorkItemService` retains placement orchestration and validation of result,
+retry, and error updates. SQLAlchemy sessions and atomic lifecycle invariants
+remain in the Stores.
 
 ## API and security boundary
 

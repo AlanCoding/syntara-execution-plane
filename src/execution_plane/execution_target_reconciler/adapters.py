@@ -60,10 +60,10 @@ class ExecutionTargetSnapshotSourceAdapter(ExecutionTargetSnapshotSource):
 
     async def list(self) -> Sequence[ExecutionTargetSnapshot]:
         """Return all targets with interned Cluster backrefs. Orphans with no Cluster are omitted."""
-        interned = {cluster.id: cluster_snapshot_from_model(cluster) for cluster in await self._clusters.list()}
+        interned = {cluster.id: cluster_snapshot_from_model(cluster) for cluster in await self._clusters.store.list()}
         return tuple(
             execution_target_snapshot_from_model(row, interned[row.cluster_id])
-            for row in await self._targets.list()
+            for row in await self._targets.store.list()
             if row.cluster_id in interned
         )
 

@@ -1,6 +1,6 @@
 # Execution Plane: Work Store and Service
 
-`WorkStore` is the internal persistence boundary for `WorkItem` and
+`WorkStore` is the persistence boundary for `WorkItem` and
 `CompletionEvent` records. `WorkItemService` is the domain-facing boundary used
 by command handlers, the worker, Worker Managers, the Completion Notifier, and
 the drain monitor.
@@ -13,24 +13,24 @@ the drain monitor.
 
 | Layer | Responsibility |
 |---|---|
-| `WorkItemService` | Public Work use cases, client-scoped reads, placement orchestration, terminal-result policy, retry validation, and claim ownership checks |
+| `WorkItemService` | Placement orchestration, terminal-result policy, retry validation, and bounded error messages |
 | `WorkStore` | SQLAlchemy sessions and engines, row locks, commits and rollbacks, queue selection, atomic state transitions, and transactional completion-outbox writes |
 
-Domain operations flow only through `WorkItemService`. Composition roots
-construct `WorkStore` with `from_engine` or `from_database_url` and inject that
-Store into the Service; the Store's other methods are internal persistence
-transitions exercised directly only by Store tests.
+Composition roots construct `WorkStore` and inject it into `WorkItemService`.
+The Service exposes that same instance as a typed public `store` attribute.
+Callers use `service.store` for persistence operations and the Service itself
+for validation and placement orchestration; method signatures are defined once.
 
 ## Service contract
 
-`WorkItemService` exposes:
+`WorkItemService` exposes its typed `store` and retains operations with policy:
 
-- `dispatch`, `get`, `list_for_client`, and `request_cancel` for command and query flows.
-- `reserve_one` and `place_reserved_item` for worker scheduling.
-- `mark_dispatched`, `refresh_claim`, `update_backend_resource`, `set_result`,
-  `mark_reconciliation_required`, and `requeue_pre_execute_failure` for execution.
-- `get_pending_completion_events` and `record_completion_event_attempt` for durable completion delivery.
-- `is_target_drained` for target and Cluster drain finalization.
+- `store.dispatch`, `store.get`, `store.list_for_client`, and `store.request_cancel` for command and query flows.
+- `store.reserve_one` and `place_reserved_item` for worker scheduling.
+- `store.mark_dispatched`, `store.refresh_claim`, `update_backend_resource`, `set_result`,
+  `mark_reconciliation_required`, and `store.requeue_pre_execute_failure` for execution.
+- `store.get_pending_completion_events` and `record_completion_event_attempt` for durable completion delivery.
+- `store.is_target_drained` for target and Cluster drain finalization.
 
 The Service validates terminal result statuses and non-negative completion retry
 delays. It resolves Work requirements, revalidates candidate targets, fails a

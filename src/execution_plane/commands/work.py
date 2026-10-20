@@ -20,7 +20,7 @@ class WorkCommandHandler:
         if not isinstance(payload, WorkExecute):
             raise UnsupportedCommand
         work_service = WorkItemService(WorkStore.from_engine(context.engine))
-        item = await work_service.dispatch(
+        item = await work_service.store.dispatch(
             client_id=context.client_id,
             item_id=message.command_id,
             payload=payload.model_dump(mode="json"),

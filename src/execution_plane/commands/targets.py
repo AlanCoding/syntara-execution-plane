@@ -44,7 +44,7 @@ class TargetCommandHandler:
                     raise DefaultExecutionTargetError
                 if await session.get(ExecutionTarget, resource_id) is not None:
                     raise ProtocolConflict
-                await service.create(
+                await service.store.create(
                     cluster_id=payload.cluster_id,
                     name=payload.name,
                     backend_type=BackendType(payload.backend_type),
@@ -56,7 +56,7 @@ class TargetCommandHandler:
                     labels=payload.labels,
                     target_id=resource_id,
                 )
-                await service.activate(resource_id, SYSTEM_ACTOR)
+                await service.store.activate(resource_id, SYSTEM_ACTOR)
             else:
                 target = await session.get(ExecutionTarget, resource_id, with_for_update=True)
                 if target is None:
@@ -73,7 +73,7 @@ class TargetCommandHandler:
                         raise ProtocolConflict
                     if payload.placement is not None and payload.placement.type != target.placement.type:
                         raise ProtocolConflict
-                    await service.update(
+                    await service.store.update(
                         resource_id,
                         updated_by=SYSTEM_ACTOR,
                         name=payload.name,

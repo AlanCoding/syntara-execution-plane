@@ -134,12 +134,12 @@ async def test_mapped_rows_reload_project_ids_and_work_item_status() -> None:  #
         assert restored_item.status is WorkItemStatus.CLAIMED
 
         work_service = WorkItemService(WorkStore.from_engine(engine))
-        assert await work_service.mark_dispatched(
+        assert await work_service.store.mark_dispatched(
             work_item_id,
             claim_owner_id=claim_owner_id,
             claim_generation=1,
         )
-        dispatched = await work_service.get(
+        dispatched = await work_service.store.get(
             work_item_id,
             client_id=binding_key[0],
         )

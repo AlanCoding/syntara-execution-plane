@@ -69,7 +69,7 @@ async def _process_item(  # noqa: C901, PLR0912 - dispatch outcomes have distinc
             claim_generation=claim_generation,
         )
         return
-    target = await target_service.get(item.execution_target_id)
+    target = await target_service.store.get(item.execution_target_id)
     if target is None:
         await work_service.set_result(
             item.id,
@@ -93,7 +93,7 @@ async def _process_item(  # noqa: C901, PLR0912 - dispatch outcomes have distinc
             claim_generation=claim_generation,
         )
         return
-    if item.status is not WorkItemStatus.CLAIMED or not await work_service.mark_dispatched(
+    if item.status is not WorkItemStatus.CLAIMED or not await work_service.store.mark_dispatched(
         item.id,
         claim_owner_id=claim_owner_id,
         claim_generation=claim_generation,
@@ -104,7 +104,7 @@ async def _process_item(  # noqa: C901, PLR0912 - dispatch outcomes have distinc
         logger.info("Node execution result persisted", work_item_id=wi_id)
     except RetryableDispatchError as exc:
         await asyncio.sleep(settings.dispatch_retry_backoff_seconds)
-        await work_service.requeue_pre_execute_failure(
+        await work_service.store.requeue_pre_execute_failure(
             item.id,
             claim_owner_id=claim_owner_id,
             claim_generation=claim_generation,
@@ -204,7 +204,7 @@ async def _poll_loop(
     while True:
         item = None
         try:
-            item = await work_service.reserve_one()
+            item = await work_service.store.reserve_one()
             if item:
                 if item.execution_target_id is None:
                     item = await work_service.place_reserved_item(item)

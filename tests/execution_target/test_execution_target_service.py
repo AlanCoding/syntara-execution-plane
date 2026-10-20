@@ -214,7 +214,7 @@ async def test_service_creates_target_with_identity_label_and_cleanses_user_labe
     store._session_factory = _SessionFactory(session)  # type: ignore[assignment]
     service = ExecutionTargetService(store)
 
-    result = await service.create(
+    result = await service.store.create(
         target.cluster_id,
         target.name,
         target.backend_type,
@@ -392,7 +392,7 @@ async def test_service_delegates_eligible_listing_without_a_database_session() -
     target = _target(status=TargetStatus.ACTIVE)
     service = ExecutionTargetService(_Store(target))  # type: ignore[arg-type]
 
-    assert await service.list(cluster_id=target.cluster_id, eligible_only=True) == [target]
+    assert await service.store.list(cluster_id=target.cluster_id, eligible_only=True) == [target]
 
 
 @pytest.mark.asyncio
@@ -402,7 +402,7 @@ async def test_service_delegates_create_get_activate_and_update() -> None:
     service = ExecutionTargetService(store)  # type: ignore[arg-type]
 
     assert (
-        await service.create(
+        await service.store.create(
             target.cluster_id,
             target.name,
             target.backend_type,
@@ -416,12 +416,12 @@ async def test_service_delegates_create_get_activate_and_update() -> None:
         is target
     )
     assert store.created["target_id"] == target.id
-    assert await service.get(target.id) is target
-    assert await service.get(target.id, include_secret=True) is target
+    assert await service.store.get(target.id) is target
+    assert await service.store.get(target.id, include_secret=True) is target
     assert store.get_kwargs[-1] == {"include_secret": True}
-    assert await service.activate(target.id, uuid.uuid4()) is target
+    assert await service.store.activate(target.id, uuid.uuid4()) is target
     assert (
-        await service.update(
+        await service.store.update(
             target.id,
             updated_by=uuid.uuid4(),
             name="renamed",
@@ -439,7 +439,7 @@ async def test_service_update_replaces_user_labels_and_preserves_the_target_iden
     store._session_factory = _SessionFactory(_Session(result=_Result(target)))  # type: ignore[assignment]
     service = ExecutionTargetService(store)
 
-    await service.update(
+    await service.store.update(
         target.id,
         updated_by=uuid.uuid4(),
         labels={"region": "new", "_execution_target_id": "spoofed", "_internal": "spoofed"},
@@ -455,7 +455,7 @@ async def test_service_lists_targets_for_the_authenticated_client() -> None:
     store = _Store(target)
     service = ExecutionTargetService(store)  # type: ignore[arg-type]
 
-    result = await service.list_for_client("client-a", limit=20, target_id=target.id)
+    result = await service.store.list_for_client("client-a", limit=20, target_id=target.id)
 
     assert result == [target]
     assert store.client_scoped_queries == [("client-a", 20, target.id)]
@@ -468,8 +468,8 @@ async def test_service_delegates_drain_failure_and_finalization() -> None:
     service = ExecutionTargetService(store)  # type: ignore[arg-type]
     actor_id = uuid.uuid4()
 
-    assert await service.mark_failed(target.id, actor_id) is target
-    await service.finalize_delete(target.id)
+    assert await service.store.mark_failed(target.id, actor_id) is target
+    await service.store.finalize_delete(target.id)
 
     assert store.marked_failed is True
     assert store.finalized is True
