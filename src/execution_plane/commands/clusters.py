@@ -12,22 +12,16 @@ from execution_plane.labels import user_labels
 from execution_plane.models.cluster import Cluster
 from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane_client.commands.base import CommandPayload
-from execution_plane_client.commands.clusters import ClusterDelete, ClusterProvision, ClusterRegister, ClusterUpdate
+from execution_plane_client.commands.clusters import (
+    ClusterConfigBase,
+    ClusterDelete,
+    ClusterProvision,
+    ClusterRegister,
+    ClusterUpdate,
+)
 from execution_plane_client.errors import ProtocolConflict, UnsupportedCommand
 from execution_plane_client.handlers import HandlingResult
 from execution_plane_client.protocol import MessageEnvelope, ResourceReference
-
-_CONFIG_FIELDS = (
-    "name",
-    "endpoint",
-    "namespace",
-    "credential",
-    "ca_certificate",
-    "project_ids",
-    "labels",
-    "enabled",
-    "is_default",
-)
 
 _ClusterCommand = ClusterRegister | ClusterUpdate | ClusterDelete
 
@@ -72,7 +66,7 @@ def _persist_binding(
         if desired.desired_revision < binding.revision:
             raise ProtocolConflict
         if desired.desired_revision == binding.revision:
-            if any(getattr(binding, key) != getattr(desired, key) for key in _CONFIG_FIELDS):
+            if any(getattr(binding, key) != getattr(desired, key) for key in ClusterConfigBase.model_fields):
                 raise ProtocolConflict
             return
 
@@ -85,12 +79,12 @@ def _persist_binding(
                 created_at=now,
                 updated_at=now,
                 revision=desired.desired_revision,
-                **{key: getattr(desired, key) for key in _CONFIG_FIELDS},
+                **{key: getattr(desired, key) for key in ClusterConfigBase.model_fields},
             )
         )
         return
 
-    for key in _CONFIG_FIELDS:
+    for key in ClusterConfigBase.model_fields:
         setattr(binding, key, getattr(desired, key))
     binding.revision = desired.desired_revision
     binding.status = "pending"
@@ -154,7 +148,7 @@ class ClusterUpdateCommandHandler:
                 raise ResourceNotFoundError
             if command.is_default is False or command.enabled is False:
                 await _reject_current_default(session, binding)
-            values = {field: getattr(binding, field) for field in _CONFIG_FIELDS}
+            values = {field: getattr(binding, field) for field in ClusterConfigBase.model_fields}
             values.update(command.model_dump(exclude_unset=True, exclude={"resource_key", "desired_revision"}))
             values["labels"] = user_labels(values["labels"])
             desired = ClusterRegister(
@@ -179,7 +173,7 @@ class ClusterDeleteCommandHandler:
             if binding is None:
                 raise ResourceNotFoundError
             await _reject_current_default(session, binding)
-            values = {field: getattr(binding, field) for field in _CONFIG_FIELDS}
+            values = {field: getattr(binding, field) for field in ClusterConfigBase.model_fields}
             values["enabled"] = False
             values["labels"] = user_labels(values["labels"])
             desired = ClusterRegister(

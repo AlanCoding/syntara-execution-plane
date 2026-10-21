@@ -31,6 +31,7 @@ from execution_plane.models.execution_target_placement import KubernetesPlacemen
 from execution_plane.models.work_item import WorkItem, WorkItemStatus
 from execution_plane.work_item.work_item_store import WorkStore
 from execution_plane.work_item.work_scheduler import WorkScheduler
+from execution_plane.work_item_client import build_payload
 from execution_plane.worker import _process_item
 from execution_plane.worker_manager.vanilla_k8s.manager import VanillaK8sWorkerManager
 
@@ -45,36 +46,6 @@ _WORKLOAD_WAIT_SECONDS = 5
 _CANCEL_WORKLOAD_WAIT_SECONDS = 15
 _JOB_WAIT_TIMEOUT_SECONDS = 30
 _DISPATCH_CLEANUP_TIMEOUT_SECONDS = 30
-
-_SCRIPT_INVOCATION = {
-    "version": 1,
-    "operation": "execute",
-    "inputs": {"language": "bash", "code": "echo ep-integration-ok"},
-    "credentials": {"resolved": {}},
-    "workflow_context": {},
-    "settings": {},
-    "timeout_seconds": 120,
-}
-
-_SLEEP_SCRIPT_INVOCATION = {
-    "version": 1,
-    "operation": "execute",
-    "inputs": {"language": "bash", "code": f"sleep {_WORKLOAD_WAIT_SECONDS}"},
-    "credentials": {"resolved": {}},
-    "workflow_context": {},
-    "settings": {},
-    "timeout_seconds": 90,
-}
-
-_CANCEL_SCRIPT_INVOCATION = {
-    "version": 1,
-    "operation": "execute",
-    "inputs": {"language": "bash", "code": f"sleep {_CANCEL_WORKLOAD_WAIT_SECONDS}"},
-    "credentials": {"resolved": {}},
-    "workflow_context": {},
-    "settings": {},
-    "timeout_seconds": 60,
-}
 
 
 async def _read_job(batch_api: BatchV1Api, job_name: str, namespace: str) -> V1Job | None:
@@ -181,15 +152,12 @@ async def _dispatch_item(
     worker_managers: WorkerManagerRegistry,
     *,
     client_id: str,
-    invocation: dict[str, object],
+    payload: dict[str, object],
 ) -> _DispatchedItem:
     item = await work.store.dispatch(
         client_id=client_id,
         item_id=uuid.uuid4(),
-        payload={
-            "image": _NODE_IMAGE,
-            "invocation": invocation,
-        },
+        payload=payload,
     )
 
     assigned = await work.scheduler.claim_and_place_work()
@@ -265,7 +233,13 @@ async def test_work_item_dispatched_to_kind_cluster_reaches_completed(ep_cluster
                 work,
                 work.worker_managers,
                 client_id=client_id,
-                invocation=_SCRIPT_INVOCATION,
+                payload=build_payload(
+                    language="bash",
+                    code="echo ep-integration-ok",
+                    timeout_seconds=120,
+                    environment={},
+                    image=_NODE_IMAGE,
+                ),
             )
             item = dispatched.item
             assigned = dispatched.assigned
@@ -316,7 +290,13 @@ async def test_work_item_dispatched_to_kind_cluster_includes_node_selector_in_po
                     work,
                     work.worker_managers,
                     client_id=client_id,
-                    invocation=_SLEEP_SCRIPT_INVOCATION,
+                    payload=build_payload(
+                        language="bash",
+                        code=f"sleep {_WORKLOAD_WAIT_SECONDS}",
+                        timeout_seconds=90,
+                        environment={},
+                        image=_NODE_IMAGE,
+                    ),
                 )
                 item = dispatched.item
                 assigned = dispatched.assigned
@@ -391,7 +371,13 @@ async def test_work_item_cancel_reaches_cancelled(
                 work,
                 work.worker_managers,
                 client_id=client_id,
-                invocation=_CANCEL_SCRIPT_INVOCATION,
+                payload=build_payload(
+                    language="bash",
+                    code=f"sleep {_CANCEL_WORKLOAD_WAIT_SECONDS}",
+                    timeout_seconds=60,
+                    environment={},
+                    image=_NODE_IMAGE,
+                ),
             )
             item = dispatched.item
             assigned = dispatched.assigned
