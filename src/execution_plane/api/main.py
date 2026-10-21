@@ -29,6 +29,7 @@ from execution_plane.api.pagination import (
     generate_response,
 )
 from execution_plane.api.schemas import ClusterRead, ExecutionTargetRead, WorkItemRead  # noqa: TC001
+from execution_plane.cluster.cluster_store import DefaultClusterError
 from execution_plane.commands.clusters import ResourceNotFoundError
 from execution_plane.commands.context import EPCommandContext
 from execution_plane.commands.queries import EPResourceQueries
@@ -37,6 +38,7 @@ from execution_plane.config import get_ep_settings
 from execution_plane.execution_target.execution_target_store import (
     ClusterNotAvailableError,
     DefaultExecutionTargetError,
+    TargetNotEligibleForDefaultError,
 )
 from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane.models.execution_target import ExecutionTarget
@@ -152,7 +154,13 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
             result = await handler.handle(
                 message, payload, EPCommandContext(identity.client_id, request.app.state.ep_engine)
             )
-        except (DuplicateWorkItemError, DefaultExecutionTargetError, ClusterNotAvailableError):
+        except (
+            DuplicateWorkItemError,
+            DefaultExecutionTargetError,
+            DefaultClusterError,
+            ClusterNotAvailableError,
+            TargetNotEligibleForDefaultError,
+        ):
             raise HTTPException(status_code=409, detail="Resource state conflicts with the request") from None
         except (ValidationError, ValueError, UnsupportedCommand):
             raise HTTPException(status_code=422, detail="Invalid or unsupported command") from None
