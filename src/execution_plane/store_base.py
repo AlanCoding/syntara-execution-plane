@@ -5,8 +5,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Self
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from execution_plane.database.engine import create_ep_engine
 from execution_plane.store_errors import StoreConfigurationError, StoreSessionError
 
 if TYPE_CHECKING:
@@ -40,11 +41,7 @@ class StoreBase:
         else:
             if database_url is None:
                 raise StoreConfigurationError
-            self._engine = (
-                create_async_engine(database_url)
-                if poolclass is None
-                else create_async_engine(database_url, poolclass=poolclass)
-            )
+            self._engine = create_ep_engine(database_url, poolclass=poolclass)
             self._owns_engine = True
 
         self._session_factory = async_sessionmaker(self._engine, class_=AsyncSession, expire_on_commit=False)

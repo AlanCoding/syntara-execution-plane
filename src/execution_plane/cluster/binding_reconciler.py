@@ -8,11 +8,12 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import and_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col
 
 from execution_plane.cluster.cluster_registrar import ClusterRegistrar, NoopDiscoveryMechanism
 from execution_plane.cluster.cluster_store import ClusterStore
+from execution_plane.database.engine import create_ep_engine
 from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
 from execution_plane.models.cluster import Cluster, ClusterStatus
 from execution_plane.models.cluster_binding import ClusterBinding
@@ -191,7 +192,7 @@ class ClusterBindingReconciler:
 
 async def run_cluster_binding_reconciler(database_url: str) -> None:
     """Run the EP controller with its own database pool."""
-    engine = create_async_engine(database_url)
+    engine = create_ep_engine(database_url)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     cluster_store = ClusterStore.from_engine(engine)
     target_store = ExecutionTargetStore.from_engine(engine)

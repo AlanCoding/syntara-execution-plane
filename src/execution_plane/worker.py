@@ -14,6 +14,7 @@ from execution_plane.cluster.binding_reconciler import run_cluster_binding_recon
 from execution_plane.cluster.cluster_store import ClusterStore
 from execution_plane.completion_notifier.notifier import CompletionNotifier
 from execution_plane.config import get_ep_settings, to_asyncpg_url
+from execution_plane.database.ssl import ssl_connect_args_from_env
 from execution_plane.drain_monitor import DrainMonitor
 from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
 from execution_plane.execution_target_reconciler.adapters import (
@@ -172,7 +173,7 @@ async def _listen_loop(database_url: str, wakeup_event: asyncio.Event) -> None:
     while True:
         try:
             disconnected = asyncio.Event()
-            conn: asyncpg.Connection = await asyncpg.connect(database_url)
+            conn: asyncpg.Connection = await asyncpg.connect(database_url, **ssl_connect_args_from_env())
             try:
                 conn.add_termination_listener(lambda _, ev=disconnected: ev.set())
                 await conn.add_listener(NOTIFY_CHANNEL, lambda *_: wakeup_event.set())
