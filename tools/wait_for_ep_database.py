@@ -15,6 +15,8 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.engine import make_url
 
+from execution_plane.database.ssl import ssl_connect_args_from_env, strip_unsupported_asyncpg_ssl_query
+
 _DEFAULT_TIMEOUT_SECONDS = 180.0
 _RETRY_PAUSE_SECONDS = 2.0
 _ALEMBIC_VERSION_SQL = "SELECT version_num FROM execution_plane.alembic_version"
@@ -25,7 +27,9 @@ def _dsn() -> str:
     if not url:
         msg = "DATABASE_URL or EP_DATABASE_URL is required"
         raise SystemExit(msg)
-    return make_url(url).set(drivername="postgresql").render_as_string(hide_password=False)
+    return strip_unsupported_asyncpg_ssl_query(
+        make_url(url).set(drivername="postgresql").render_as_string(hide_password=False)
+    )
 
 
 def _expected_heads() -> frozenset[str]:
@@ -44,7 +48,7 @@ def _alembic_heads_from_env() -> frozenset[str] | None:
 
 
 async def _ready(dsn: str, sql: str | None, heads: frozenset[str] | None) -> None:
-    conn = await asyncpg.connect(dsn)
+    conn = await asyncpg.connect(dsn, **ssl_connect_args_from_env())
     try:
         if sql:
             result = await conn.fetchval(sql)

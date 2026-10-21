@@ -7,16 +7,21 @@ import ipaddress
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, computed_field, model_validator
+from pydantic import AliasChoices, Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
+from execution_plane.database.ssl import strip_unsupported_asyncpg_ssl_query
+
 _AES_256_KEY_BYTES = 32
+_VALID_SSL_MODES = frozenset({"disable", "allow", "prefer", "require", "verify-ca", "verify-full"})
+_SSL_MODES_REQUIRING_CLIENT_CERTS = frozenset({"require", "verify-ca", "verify-full"})
 
 
 def to_asyncpg_url(database_url: str) -> str:
     """Return a PostgreSQL URL without a SQLAlchemy DBAPI driver suffix."""
-    return make_url(database_url).set(drivername="postgresql").render_as_string(hide_password=False)
+    rendered = make_url(database_url).set(drivername="postgresql").render_as_string(hide_password=False)
+    return strip_unsupported_asyncpg_ssl_query(rendered)
 
 
 class EPSettings(BaseSettings):
@@ -27,6 +32,10 @@ class EPSettings(BaseSettings):
     # Runtime configuration accepts only the EP-owned database variable. Alembic
     # has a separate DATABASE_URL input for the one-off migration job.
     database_url: str = Field(validation_alias="EP_DATABASE_URL")
+    db_ssl_mode: str = Field(default="prefer", validation_alias="EP_DB_SSL_MODE")
+    db_ssl_root_cert: str | None = Field(default=None, validation_alias="EP_DB_SSL_ROOT_CERT")
+    db_ssl_cert: str | None = Field(default=None, validation_alias="EP_DB_SSL_CERT")
+    db_ssl_key: str | None = Field(default=None, validation_alias="EP_DB_SSL_KEY")
 
     node_startup_seconds: int = Field(default=120, validation_alias="EP_NODE_STARTUP_SECONDS", ge=1)
     node_grace_seconds: int = Field(default=30, validation_alias="EP_NODE_GRACE_SECONDS", ge=1)
@@ -88,6 +97,44 @@ class EPSettings(BaseSettings):
         default_factory=list,
         validation_alias="EP_WORKLOAD_FORBIDDEN_EGRESS_CIDRS",
     )
+
+    @field_validator("db_ssl_mode")
+    @classmethod
+    def validate_ssl_mode(cls, value: str) -> str:
+        """Accept only PostgreSQL sslmode values."""
+        lowered = value.lower()
+        if lowered not in _VALID_SSL_MODES:
+            msg = f"Invalid SSL mode '{value}'. Must be one of: {', '.join(sorted(_VALID_SSL_MODES))}"
+            raise ValueError(msg)
+        return lowered
+
+    @field_validator("db_ssl_root_cert", "db_ssl_cert", "db_ssl_key", mode="before")
+    @classmethod
+    def empty_ssl_path_to_none(cls, value: str | None) -> str | None:
+        """Treat blank certificate paths as unset."""
+        if value == "":
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def validate_ssl_fields(self) -> EPSettings:
+        """Reject incomplete TLS combinations before the first connection."""
+        if self.db_ssl_key is not None and self.db_ssl_cert is None:
+            msg = "EP_DB_SSL_KEY requires EP_DB_SSL_CERT"
+            raise ValueError(msg)
+        if (self.db_ssl_cert is not None or self.db_ssl_key is not None) and (
+            self.db_ssl_mode not in _SSL_MODES_REQUIRING_CLIENT_CERTS
+        ):
+            msg = (
+                "Client certificates are only supported with SSL modes "
+                f"{', '.join(sorted(_SSL_MODES_REQUIRING_CLIENT_CERTS))}; "
+                f"current mode is '{self.db_ssl_mode}'"
+            )
+            raise ValueError(msg)
+        if self.db_ssl_mode in ("verify-ca", "verify-full") and self.db_ssl_root_cert is None:
+            msg = "EP_DB_SSL_ROOT_CERT is required when EP_DB_SSL_MODE is verify-ca or verify-full"
+            raise ValueError(msg)
+        return self
 
     @model_validator(mode="after")
     def validate_resource_monitor_timeout(self) -> EPSettings:

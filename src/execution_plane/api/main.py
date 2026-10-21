@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from execution_plane.api.auth import ServiceIdentity, get_service_identity, require_scope
 from execution_plane.api.list_queries import list_filter_openapi, list_query_filters
@@ -35,6 +35,7 @@ from execution_plane.commands.context import EPCommandContext
 from execution_plane.commands.queries import EPResourceQueries
 from execution_plane.commands.registry import build_ep_registry
 from execution_plane.config import get_ep_settings
+from execution_plane.database.engine import create_ep_engine
 from execution_plane.execution_target.execution_target_store import (
     ClusterNotAvailableError,
     DefaultExecutionTargetError,
@@ -59,7 +60,7 @@ _BODY_LIMIT = 1024 * 1024
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Open an EP-owned database pool for the HTTP service lifetime."""
     settings = get_ep_settings()
-    engine = create_async_engine(settings.database_url)
+    engine = create_ep_engine(settings.database_url)
     app.state.ep_settings = settings
     app.state.ep_engine = engine
     app.state.ep_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

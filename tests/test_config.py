@@ -30,6 +30,7 @@ def test_ep_settings_has_cold_start_and_network_defaults() -> None:
     assert settings.resource_monitor_probe_timeout_seconds == 10.0
     assert settings.resource_monitor_failure_threshold == 3
     assert settings.resource_monitor_success_threshold == 2
+    assert settings.db_ssl_mode == "prefer"
 
 
 def test_resource_monitor_timeout_must_be_shorter_than_interval(monkeypatch: pytest.MonkeyPatch) -> None:

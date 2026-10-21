@@ -18,6 +18,8 @@ from sqlalchemy import Table, pool, text
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlmodel import SQLModel
 
+from execution_plane.database.ssl import ssl_connect_args_from_env, strip_unsupported_asyncpg_ssl_query
+
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
     from sqlalchemy.schema import SchemaItem
@@ -42,7 +44,7 @@ database_url = config.get_main_option("sqlalchemy.url") or os.environ.get("DATAB
 if not database_url:
     msg = "DATABASE_URL must be set or sqlalchemy.url provided in alembic.ini"
     raise RuntimeError(msg)
-config.set_main_option("sqlalchemy.url", database_url)
+config.set_main_option("sqlalchemy.url", strip_unsupported_asyncpg_ssl_query(database_url))
 
 
 def include_object(
@@ -97,6 +99,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=ssl_connect_args_from_env(),
     )
     async with connectable.connect() as connection:
         await connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {EP_SCHEMA}"))
