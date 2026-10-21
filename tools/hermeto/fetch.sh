@@ -198,7 +198,7 @@ if [ "$FETCH_DEPS" = true ]; then
         log_info "prefetch-input: $PREFETCH_INPUT"
         rm -rf "$OUTPUT_DIR"
         mkdir -p "$OUTPUT_DIR"
-        run_hermeto --mode permissive \
+        run_hermeto \
             fetch-deps --source . --output "$OUTPUT_DIR" "$PREFETCH_INPUT"
         log_info "Fetched dependencies into $OUTPUT_DIR"
     fi
