@@ -50,6 +50,17 @@ class AoClient:
     def close(self) -> None:
         self._client.close()
 
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: dict[str, Any] | None = None,
+        params: dict[str, str | int] | None = None,
+    ) -> httpx.Response:
+        """Call an AO route, retaining status/headers for facade contract assertions."""
+        return self._client.request(method, f"{self.base_url}{path}", headers=self._headers(), json=body, params=params)
+
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}"}
 
@@ -124,7 +135,7 @@ class AoClient:
             pytest.fail(f"unexpected execution payload: {body!r}")
         return body
 
-    def poll_execution(self, execution_id: str) -> dict[str, Any]:
+    def poll_execution(self, execution_id: str, *, expected_status: str = "completed") -> dict[str, Any]:
         timeout_seconds = float(os.environ.get("E2E_POLL_TIMEOUT", _DEFAULT_POLL_TIMEOUT_SECONDS))
         interval_seconds = float(os.environ.get("E2E_POLL_INTERVAL", _DEFAULT_POLL_INTERVAL_SECONDS))
         deadline = time.monotonic() + timeout_seconds
@@ -133,9 +144,9 @@ class AoClient:
             last = self.get_execution(execution_id)
             status = str(last.get("status") or "")
             LOGGER.info("execution %s status=%s", execution_id, status)
-            if status == "completed":
+            if status == expected_status:
                 return last
-            if status in _TERMINAL_FAILURE_STATUSES:
+            if status in _TERMINAL_FAILURE_STATUSES or status == "completed":
                 pytest.fail(
                     f"execution {execution_id} ended with status={status}; error_details={last.get('error_details')!r}"
                 )

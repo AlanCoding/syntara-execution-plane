@@ -35,6 +35,19 @@ coverage report. To combine downloaded reports locally, extract each test job's
 artifact into its own directory under `coverage-artifacts/` and run the same
 target.
 
+Live AO-to-EP tests live in `tests/e2e` and run in the EP Konflux Kind pipeline.
+For target CRUD, deploy AO's target facade with one installed cluster and a running EP worker:
+
+```bash
+AO_API_BASE=https://ao.example APP_ADMIN_PASSWORD_PATH=/path/to/admin-password \
+  uv run pytest --confcutdir=tests/e2e tests/e2e/test_execution_targets.py -m e2e -v
+```
+
+Use a dedicated test stack: promotion tests temporarily change the default target,
+restore it in cleanup, and wait for EP to remove the test targets.
+Coverage includes a script workflow pinned to a newly created target, its returned
+output, and a placement failure when rerunning after deleting that target.
+
 For a separate local EP database, copy `.env.example` to `.env` if you need to
 override defaults. Generate local secrets and TLS material first (`make setup`,
 or `./tools/generate_secrets.sh` and `uv run python tools/generate_certs.py`).
