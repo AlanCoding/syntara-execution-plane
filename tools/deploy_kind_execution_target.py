@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import base64
 import json
 import os
@@ -41,6 +42,15 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from execution_plane.cluster.binding_reconciler import ClusterBindingReconciler
+from execution_plane.cluster.cluster_registrar import ClusterRegistrar, NoopDiscoveryMechanism
+from execution_plane.cluster.cluster_store import ClusterStore
+from execution_plane.config import get_ep_settings
+from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
+from execution_plane.models.cluster import ClusterStatus
+from execution_plane.models.cluster_binding import ClusterBinding
 from execution_plane.work_item_client import ep_service_token
 from execution_plane_client.protocol import Command, CommandScope, MessageEnvelope
 
@@ -390,6 +400,73 @@ def source_integration_id(cluster_name: str) -> uuid.UUID:
     return uuid.uuid5(uuid.NAMESPACE_URL, f"https://execution-plane.local/kind/{cluster_name}")
 
 
+def register_kind_binding_to_db(
+    *,
+    cluster_name: str,
+    binding_name: str,
+    endpoint: str,
+    namespace: str,
+    credential: str,
+    ca_certificate: str,
+    database_url: str,
+) -> None:
+    """Register the cluster binding directly to the database (no EP API required).
+
+    Used in CI where the EP API is not running. Writes a ClusterBinding and runs
+    the ClusterBindingReconciler once — the same production path the EP worker
+    follows when it processes a cluster.provision command.
+    """
+    os.environ.setdefault("EP_DATABASE_URL", database_url)
+    get_ep_settings.cache_clear()
+
+    client_id = os.environ.get("EP_AO_CLIENT_ID", "syntara-orchestration")
+    integration_id = source_integration_id(cluster_name)
+
+    async def _run() -> None:
+        engine = create_async_engine(database_url)
+        session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with (
+                ClusterStore.from_engine(engine) as cluster_store,
+                ExecutionTargetStore.from_engine(engine) as target_store,
+            ):
+                registrar = ClusterRegistrar(cluster_store, target_store, NoopDiscoveryMechanism())
+                reconciler = ClusterBindingReconciler(session_factory, registrar, cluster_store)
+                now = datetime.now(UTC)
+                async with session_factory.begin() as session:
+                    existing = await session.get(ClusterBinding, (client_id, integration_id))
+                    if existing is None:
+                        session.add(
+                            ClusterBinding(
+                                client_id=client_id,
+                                source_integration_id=integration_id,
+                                revision=1,
+                                name=binding_name,
+                                endpoint=endpoint,
+                                namespace=namespace,
+                                credential=credential,
+                                ca_certificate=ca_certificate,
+                                is_default=False,
+                                created_at=now,
+                                updated_at=now,
+                            )
+                        )
+                        print(f"[INFO] Wrote ClusterBinding {integration_id}")
+                    else:
+                        print(f"[INFO] Reusing existing ClusterBinding {integration_id} (status={existing.status})")
+                await reconciler.reconcile_once()
+                cluster = await cluster_store.get_by_source(client_id, integration_id)
+                if cluster is None or cluster.status is not ClusterStatus.ACTIVE:
+                    status = cluster.status if cluster else "not found"
+                    msg = f"Cluster registration failed; status={status}"
+                    raise RuntimeError(msg)
+                print(f"[INFO] Cluster {cluster.id} registered and ACTIVE")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
 def register_kind_binding(
     *,
     api_url: str,
@@ -436,6 +513,15 @@ def main() -> int:
     parser.add_argument("--api-url", default=os.environ.get("EP_API_URL", DEFAULT_API_URL))
     parser.add_argument("--wait-seconds", type=int, default=DEFAULT_WAIT_SECONDS)
     parser.add_argument("--recreate", action="store_true", help="Delete and recreate the kind cluster")
+    parser.add_argument(
+        "--database-url",
+        default=os.environ.get("EP_TEST_DATABASE_URL"),
+        help=(
+            "Register directly to this asyncpg database URL instead of going through the EP API. "
+            "Defaults to EP_TEST_DATABASE_URL when set (CI mode). "
+            "When absent the script contacts the running EP API at --api-url."
+        ),
+    )
     args = parser.parse_args()
 
     kubeconfig: Path | None = None
@@ -452,16 +538,32 @@ def main() -> int:
         endpoint = f"https://{node_internal_ip(kubeconfig)}:{CONTROL_PLANE_PORT}"
         connect_worker_to_kind_network()
         print(f"[INFO] Kind API endpoint for the EP worker: {endpoint}")
-        binding, targets = register_kind_binding(
-            api_url=args.api_url,
-            cluster_name=args.cluster_name,
-            binding_name=args.binding_name,
-            endpoint=endpoint,
-            namespace=args.namespace,
-            credential=credential,
-            ca_certificate=ca_certificate,
-            wait_seconds=args.wait_seconds,
-        )
+        if args.database_url:
+            register_kind_binding_to_db(
+                cluster_name=args.cluster_name,
+                binding_name=args.binding_name,
+                endpoint=endpoint,
+                namespace=args.namespace,
+                credential=credential,
+                ca_certificate=ca_certificate,
+                database_url=args.database_url,
+            )
+        else:
+            binding, targets = register_kind_binding(
+                api_url=args.api_url,
+                cluster_name=args.cluster_name,
+                binding_name=args.binding_name,
+                endpoint=endpoint,
+                namespace=args.namespace,
+                credential=credential,
+                ca_certificate=ca_certificate,
+                wait_seconds=args.wait_seconds,
+            )
+            print()
+            print(f"[INFO] Cluster binding {binding['source_integration_id']} is {binding['status']}")
+            print(f"[INFO] Cluster id: {binding.get('cluster_id')}")
+            print("[INFO] Execution targets:")
+            print(json.dumps(targets, indent=2, default=str))
     except (FileNotFoundError, RuntimeError, TimeoutError, TypeError, subprocess.CalledProcessError) as exc:
         if isinstance(exc, subprocess.CalledProcessError):
             detail = (exc.stderr or exc.stdout or "").strip() or str(exc)
@@ -473,11 +575,6 @@ def main() -> int:
         if kubeconfig is not None:
             kubeconfig.unlink(missing_ok=True)
 
-    print()
-    print(f"[INFO] Cluster binding {binding['source_integration_id']} is {binding['status']}")
-    print(f"[INFO] Cluster id: {binding.get('cluster_id')}")
-    print("[INFO] Execution targets:")
-    print(json.dumps(targets, indent=2, default=str))
     return 0
 
 
