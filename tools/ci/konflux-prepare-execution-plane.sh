@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Deploy the standalone Execution Plane onto the AO Kind cluster (Konflux / aap-dev).
+# Finish Konflux e2e wiring after aap-dev deploys EP with the operator.
 #
-# Does not change the Automation Orchestrator operator, CR, or CSV. After
-# deploy-ao, this script:
-#   1. Applies deploy/kubernetes/execution-target/rbac.yaml (dispatcher SA).
-#   2. Creates an execution_plane database/roles on ao-postgres.
-#   3. Mints EP TLS, AO JWT public-key, and encryption-key secrets.
-#   4. Runs the migrate Job and deploys API + worker from EP_IMAGE.
-#   5. Registers the Kind cluster as an EP cluster-binding via the EP API.
-#   6. Pre-pulls the script-node image and enables script dispatch on myao-worker.
+# deploy-ao (AO_EXECUTION_PLANE=true) already created myao-execution-plane-api
+# and myao-execution-plane-worker in the AO namespace. This script does not
+# deploy a sidecar EP. After AO is Ready it:
+#   1. Applies deploy/kubernetes/execution-target/rbac.yaml (dispatcher SA
+#      and Job namespace for Kind cluster-binding).
+#   2. Waits for the operator EP API and worker.
+#   3. Registers the Kind cluster as an EP cluster-binding via the EP API.
+#   4. Points myao-worker at the operator EP (APP_EP_API_URL), sets
+#      EP_COMPLETION_CALLBACK_URL on the operator EP worker, allows the
+#      operator callback CN on the AO backend, and opens backend ingress
+#      from execution-plane-worker so the completion callback is not dropped.
+#   5. Pre-pulls the script-node image.
 #
-# Requires the ep image already built by konflux-build-ep-image.sh, default
-# localhost:5001/<AO_NAMESPACE>/ep:<AAP_VERSION>.
 # CREDENTIAL_REF may name an existing AO credential that can access the Kind
 # cluster's dispatcher service account. When omitted, one is created or
 # refreshed from the dispatcher ServiceAccount token through the AO API.
@@ -25,20 +27,17 @@ export KUBECONFIG
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 INIT_YAML="${INIT_YAML:-${REPO_ROOT}/deploy/kubernetes/execution-target/rbac.yaml}"
-BASE_DIR="${BASE_DIR:-${REPO_ROOT}/deploy/kubernetes/base}"
 NAMESPACE="${NAMESPACE:-execution-plane}"
 AO_NAMESPACE="${AO_NAMESPACE:-aap27-next}"
 AO_NAME="${AO_NAME:-myao}"
-AAP_VERSION="${AAP_VERSION:-2.7-next}"
-EP_IMAGE="${EP_IMAGE:-localhost:5001/${AO_NAMESPACE}/ep:${AAP_VERSION}}"
+EP_API_DEPLOY="${EP_API_DEPLOY:-${AO_NAME}-execution-plane-api}"
+EP_WORKER_DEPLOY="${EP_WORKER_DEPLOY:-${AO_NAME}-execution-plane-worker}"
 SA_NAME="${SA_NAME:-syntara-dispatcher}"
 CLUSTER_NAME="${CLUSTER_NAME:-27-next-ao-operator}"
 ENDPOINT="${ENDPOINT:-https://kubernetes.default.svc}"
 NODE_IMAGE="${NODE_IMAGE:-quay.io/ahetheri/syntara-node-script:migration-test}"
 CREDENTIAL_REF="${CREDENTIAL_REF:-}"
 AO_API_BASE="${AO_API_BASE:-https://127.0.0.1:8443}"
-AO_CREDENTIAL_RESOLUTION_CALLBACK_URL="${AO_CREDENTIAL_RESOLUTION_CALLBACK_URL:-https://${AO_NAME}-backend.${AO_NAMESPACE}.svc:8000/api/execution_plane/v1/commands}"
-AO_COMPLETION_CALLBACK_URL="${AO_COMPLETION_CALLBACK_URL:-https://${AO_NAME}-backend.${AO_NAMESPACE}.svc:8000/api/execution_plane/v1/commands}"
 WORK_DIR=""
 
 if [[ ! -f "${KUBECONFIG}" ]]; then
@@ -47,10 +46,6 @@ if [[ ! -f "${KUBECONFIG}" ]]; then
 fi
 if [[ ! -f "${INIT_YAML}" ]]; then
   echo "ERROR: init manifest not found: ${INIT_YAML}" >&2
-  exit 1
-fi
-if [[ ! -d "${BASE_DIR}" ]]; then
-  echo "ERROR: EP manifests not found: ${BASE_DIR}" >&2
   exit 1
 fi
 if [[ -n "${CREDENTIAL_REF}" && ! "${CREDENTIAL_REF}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
@@ -75,28 +70,15 @@ print(base64.b64decode(json.load(sys.stdin)['data'][key]).decode(), end='')
 " "${key}"
 }
 
-_quote_pg() {
-  input_str="$1"
-  python3 -c "
-import sys
-from urllib.parse import quote
-print(quote(sys.argv[1], safe=''), end='')
-" "${input_str}"
-}
-
-_postgres_pod() {
-  local pod
-  pod=$(kubectl get pods -n "${AO_NAMESPACE}" --field-selector=status.phase=Running \
-    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | awk '/^ao-postgres/{print; exit}')
-  if [[ -z "${pod}" ]]; then
-    echo "ERROR: no Running ao-postgres pod in ${AO_NAMESPACE}" >&2
-    exit 1
-  fi
-  printf '%s' "${pod}"
-}
-
 _ao_jwt_issuer() {
   local issuer
+  issuer=$(kubectl get deploy "${EP_API_DEPLOY}" -n "${AO_NAMESPACE}" \
+    -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name=='EP_AO_JWT_ISSUER')].value}" \
+    2>/dev/null || true)
+  if [[ -n "${issuer}" ]]; then
+    printf '%s' "${issuer%/}"
+    return 0
+  fi
   issuer=$(kubectl exec -n "${AO_NAMESPACE}" "deploy/${AO_NAME}-backend" -- \
     /opt/app-root/src/.venv/bin/python -c \
     'from syntara.core.config.base import get_settings; print(get_settings().jwt_issuer, end="")' \
@@ -126,154 +108,116 @@ _create_ao_credential() {
       --insecure
 }
 
-_generate_tls() {
-  local dir=$1
-  openssl req -x509 -newkey rsa:2048 -sha256 -days 365 -nodes \
-    -keyout "${dir}/ca.key" -out "${dir}/ca.pem" \
-    -subj "/CN=execution-plane-konflux-ca" >/dev/null 2>&1
-
-  openssl req -newkey rsa:2048 -nodes \
-    -keyout "${dir}/tls.key" -out "${dir}/tls.csr" \
-    -subj "/CN=execution-plane-api" >/dev/null 2>&1
-  cat > "${dir}/tls.ext" <<EOF
-subjectAltName=DNS:execution-plane-api,DNS:execution-plane-api.${NAMESPACE},DNS:execution-plane-api.${NAMESPACE}.svc,DNS:execution-plane-api.${NAMESPACE}.svc.cluster.local,DNS:localhost,IP:127.0.0.1
-extendedKeyUsage=serverAuth
-EOF
-  openssl x509 -req -in "${dir}/tls.csr" -CA "${dir}/ca.pem" -CAkey "${dir}/ca.key" \
-    -CAcreateserial -out "${dir}/tls.crt" -days 365 -sha256 -extfile "${dir}/tls.ext" >/dev/null 2>&1
-
-  openssl req -newkey rsa:2048 -nodes \
-    -keyout "${dir}/client.key" -out "${dir}/client.csr" \
-    -subj "/CN=execution-plane-callback" >/dev/null 2>&1
-  cat > "${dir}/client.ext" <<EOF
-extendedKeyUsage=clientAuth
-EOF
-  openssl x509 -req -in "${dir}/client.csr" -CA "${dir}/ca.pem" -CAkey "${dir}/ca.key" \
-    -CAcreateserial -out "${dir}/client.crt" -days 365 -sha256 -extfile "${dir}/client.ext" >/dev/null 2>&1
+_ao_completion_callback_url() {
+  printf '%s' "https://${AO_NAME}-backend.${AO_NAMESPACE}.svc.cluster.local:8000/api/execution_plane/v1/events"
 }
 
-_ensure_db_secret() {
-  local migrator_pw runtime_pw host
-  host="ao-postgres.${AO_NAMESPACE}.svc"
-  if kubectl get secret execution-plane-db -n "${NAMESPACE}" >/dev/null 2>&1; then
-    echo "=== Reuse existing execution-plane-db secret ==="
-    migrator_pw=$(_secret_data execution-plane-db "${NAMESPACE}" migrator-password)
-    runtime_pw=$(_secret_data execution-plane-db "${NAMESPACE}" runtime-password)
-    printf '%s' "${migrator_pw}" > "${WORK_DIR}/migrator.pw"
-    printf '%s' "${runtime_pw}" > "${WORK_DIR}/runtime.pw"
-    chmod 600 "${WORK_DIR}/migrator.pw" "${WORK_DIR}/runtime.pw"
-    return 0
-  fi
-  migrator_pw=$(openssl rand -hex 24)
-  runtime_pw=$(openssl rand -hex 24)
-  printf '%s' "${migrator_pw}" > "${WORK_DIR}/migrator.pw"
-  printf '%s' "${runtime_pw}" > "${WORK_DIR}/runtime.pw"
-  chmod 600 "${WORK_DIR}/migrator.pw" "${WORK_DIR}/runtime.pw"
-  kubectl create secret generic execution-plane-db \
-    --namespace "${NAMESPACE}" \
-    --from-literal=migrator-password="${migrator_pw}" \
-    --from-literal=runtime-password="${runtime_pw}" \
-    --from-literal=migrator-url="postgresql+asyncpg://execution_plane_migrator:$(_quote_pg "${migrator_pw}")@${host}:5432/execution_plane" \
-    --from-literal=runtime-url="postgresql+asyncpg://execution_plane_runtime:$(_quote_pg "${runtime_pw}")@${host}:5432/execution_plane" \
-    --dry-run=client -o yaml | kubectl apply -f -
+_ep_api_url() {
+  printf '%s' "https://${EP_API_DEPLOY}.${AO_NAMESPACE}.svc.cluster.local:8443"
 }
 
-_ensure_ep_database() {
-  local pg_pod admin_pw migrator_pw runtime_pw
-  pg_pod=$(_postgres_pod)
-  admin_pw=$(_secret_data ao-postgres-admin-configuration "${AO_NAMESPACE}" password)
-  _ensure_db_secret
-  migrator_pw=$(cat "${WORK_DIR}/migrator.pw")
-  runtime_pw=$(cat "${WORK_DIR}/runtime.pw")
-  echo "=== Create execution_plane database on ${pg_pod} ==="
-  kubectl exec -i -n "${AO_NAMESPACE}" "${pg_pod}" -- \
-    env PGPASSWORD="${admin_pw}" psql -U postgres -v ON_ERROR_STOP=1 <<SQL
-SELECT format('CREATE ROLE execution_plane_migrator LOGIN PASSWORD %L', '${migrator_pw}')
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'execution_plane_migrator')
-\\gexec
-ALTER ROLE execution_plane_migrator PASSWORD '${migrator_pw}';
-
-SELECT format('CREATE ROLE execution_plane_runtime LOGIN PASSWORD %L', '${runtime_pw}')
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'execution_plane_runtime')
-\\gexec
-ALTER ROLE execution_plane_runtime PASSWORD '${runtime_pw}';
-
-SELECT 'CREATE DATABASE execution_plane OWNER execution_plane_migrator'
-WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'execution_plane')
-\\gexec
-ALTER DATABASE execution_plane OWNER TO execution_plane_migrator;
-GRANT CONNECT ON DATABASE execution_plane TO execution_plane_runtime;
-SQL
-}
-
-_ensure_keys_and_tls() {
-  local jwt_secret="${AO_NAME}-jwt-primary"
-  echo "=== Extract AO JWT public key from ${jwt_secret} ==="
-  _secret_data "${jwt_secret}" "${AO_NAMESPACE}" jwt-primary.pem > "${WORK_DIR}/jwt-primary.pem"
-  chmod 600 "${WORK_DIR}/jwt-primary.pem"
-  if ! openssl pkey -in "${WORK_DIR}/jwt-primary.pem" -pubout -out "${WORK_DIR}/jwt-public.pem" 2>/dev/null; then
-    openssl ec -in "${WORK_DIR}/jwt-primary.pem" -pubout -out "${WORK_DIR}/jwt-public.pem"
-  fi
-
-  if kubectl get secret execution-plane-api-tls -n "${NAMESPACE}" >/dev/null 2>&1 \
-    && kubectl get secret execution-plane-ao-auth -n "${NAMESPACE}" >/dev/null 2>&1 \
-    && kubectl get secret execution-plane-callback-client -n "${NAMESPACE}" >/dev/null 2>&1; then
-    echo "=== Reuse existing EP TLS secrets ==="
-    _secret_data execution-plane-ao-auth "${NAMESPACE}" ca.pem > "${WORK_DIR}/ca.pem"
-  else
-    echo "=== Generate EP API TLS ==="
-    _generate_tls "${WORK_DIR}"
-    kubectl create secret tls execution-plane-api-tls \
-      --namespace "${NAMESPACE}" \
-      --cert="${WORK_DIR}/tls.crt" --key="${WORK_DIR}/tls.key" \
-      --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create secret tls execution-plane-callback-client \
-      --namespace "${NAMESPACE}" \
-      --cert="${WORK_DIR}/client.crt" --key="${WORK_DIR}/client.key" \
-      --dry-run=client -o yaml | kubectl apply -f -
-  fi
-
-  kubectl create secret generic execution-plane-ao-auth \
-    --namespace "${NAMESPACE}" \
-    --from-file=jwt-public.pem="${WORK_DIR}/jwt-public.pem" \
-    --from-file=ca.pem="${WORK_DIR}/ca.pem" \
-    --dry-run=client -o yaml | kubectl apply -f -
-
-  if kubectl get secret execution-plane-keys -n "${NAMESPACE}" >/dev/null 2>&1; then
-    echo "=== Reuse existing credential encryption key ==="
-    return 0
-  fi
-  echo "=== Mint credential encryption key ==="
-  python3 -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode(), end='')" \
-    > "${WORK_DIR}/credential-encryption-key"
-  kubectl create secret generic execution-plane-keys \
-    --namespace "${NAMESPACE}" \
-    --from-file=credential-encryption-key="${WORK_DIR}/credential-encryption-key" \
-    --dry-run=client -o yaml | kubectl apply -f -
-}
-
-_apply_ep_workloads() {
-  local overlay
-  overlay=$(mktemp -d)
-  cp "${BASE_DIR}/"*.yaml "${overlay}/"
-  rm -f "${overlay}/kustomization.yaml"
-  sed -i "s#image: ghcr.io/syntara-orchestration/execution-plane:latest#image: ${EP_IMAGE}#g" "${overlay}"/*.yaml
-  sed -i 's/^  replicas: 2$/  replicas: 1/' "${overlay}/api.yaml"
-  echo "=== Apply EP API, worker, and migrate Job (${EP_IMAGE}) ==="
-  kubectl delete job execution-plane-migrate -n "${NAMESPACE}" --ignore-not-found --wait=true
-  kubectl apply -n "${NAMESPACE}" -f "${overlay}"
-  rm -rf "${overlay}"
-}
-
-_wait_for_migrate() {
-  echo "=== Wait for execution-plane-migrate ==="
-  if ! kubectl wait --for=condition=complete "job/execution-plane-migrate" \
-    -n "${NAMESPACE}" --timeout=180s; then
-    kubectl logs -n "${NAMESPACE}" "job/execution-plane-migrate" || true
-    kubectl describe -n "${NAMESPACE}" "job/execution-plane-migrate" || true
-    echo "ERROR: execution-plane-migrate did not complete" >&2
+_require_operator_ep_opt_in() {
+  local enabled
+  enabled=$(kubectl get configmap "${AO_NAME}-admin-settings" -n "${AO_NAMESPACE}" \
+    -o jsonpath='{.data.ENABLE_EXECUTION_PLANE}' 2>/dev/null || true)
+  if [[ "${enabled}" != "true" ]]; then
+    echo "ERROR: ${AO_NAME}-admin-settings ENABLE_EXECUTION_PLANE=${enabled:-<unset>}" >&2
+    echo "deploy-ao must run with AO_EXECUTION_PLANE=true so the operator deploys EP" >&2
+    kubectl get configmap "${AO_NAME}-admin-settings" -n "${AO_NAMESPACE}" -o yaml >&2 || true
     exit 1
   fi
+  if [[ ! -f "${HOME}/aap-dev/src/syntara-execution-plane/Containerfile" ]]; then
+    echo "ERROR: aap-dev did not overlay Execution Plane source at src/syntara-execution-plane" >&2
+    echo "stage-ep-source must finish before deploy-ao, with AO_EXECUTION_PLANE=true" >&2
+    ls -la "${HOME}/syntara-execution-plane" >&2 || true
+    cat "${HOME}/aap-dev/src/sources.yaml" >&2 || true
+    exit 1
+  fi
+  if ! grep -q 'syntara-execution-plane' "${HOME}/aap-dev/src/sources.yaml" 2>/dev/null; then
+    echo "ERROR: src/sources.yaml does not name syntara-execution-plane; EP image is prebuilt" >&2
+    cat "${HOME}/aap-dev/src/sources.yaml" >&2 || true
+    exit 1
+  fi
+  if [[ ! -f "${HOME}/aap-dev/.tmp/ao-operator-from-src.env" ]]; then
+    echo "ERROR: operator was not built from source (missing .tmp/ao-operator-from-src.env)" >&2
+    echo "the prebuilt bundle ignores ENABLE_EXECUTION_PLANE; stage-operator-source must run before deploy-ao" >&2
+    ls -la "${HOME}/automation-orchestrator-operator" >&2 || true
+    cat "${HOME}/aap-dev/src/sources.yaml" >&2 || true
+    exit 1
+  fi
+  echo "operator from-src: $(cat "${HOME}/aap-dev/.tmp/ao-operator-from-src.env")"
+}
+
+_wait_for_operator_ep() {
+  local deadline
+  echo "=== Wait for operator Execution Plane (${EP_API_DEPLOY}, ${EP_WORKER_DEPLOY}) ==="
+  deadline=$((SECONDS + 300))
+  while (( SECONDS < deadline )); do
+    if kubectl get deploy "${EP_API_DEPLOY}" -n "${AO_NAMESPACE}" >/dev/null 2>&1 \
+      && kubectl get deploy "${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 5
+  done
+  if ! kubectl get deploy "${EP_API_DEPLOY}" -n "${AO_NAMESPACE}" >/dev/null 2>&1; then
+    echo "ERROR: operator did not create deploy/${EP_API_DEPLOY} in ${AO_NAMESPACE}" >&2
+    kubectl get deploy -n "${AO_NAMESPACE}" >&2 || true
+    kubectl get configmap "${AO_NAME}-admin-settings" -n "${AO_NAMESPACE}" -o yaml >&2 || true
+    kubectl logs -n "${AO_NAMESPACE}" "deploy/automation-orchestrator-operator-controller-manager" --tail=80 >&2 || true
+    exit 1
+  fi
+  if ! kubectl rollout status "deploy/${EP_API_DEPLOY}" -n "${AO_NAMESPACE}" --timeout=180s; then
+    kubectl get pods -n "${AO_NAMESPACE}" -l "app.kubernetes.io/component=execution-plane-api" -o wide
+    kubectl describe "deploy/${EP_API_DEPLOY}" -n "${AO_NAMESPACE}" || true
+    exit 1
+  fi
+  if ! kubectl rollout status "deploy/${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" --timeout=180s; then
+    kubectl get pods -n "${AO_NAMESPACE}" -l "app.kubernetes.io/component=execution-plane-worker" -o wide
+    kubectl describe "deploy/${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" || true
+    exit 1
+  fi
+  kubectl get pods -n "${AO_NAMESPACE}" -l "app.kubernetes.io/component in (execution-plane-api,execution-plane-worker)" -o wide
+}
+
+_allow_ep_callback_ingress() {
+  echo "=== Allow ${EP_WORKER_DEPLOY} callback into ${AO_NAME}-backend ==="
+  # Additive to the operator policies: myao-backend only admits UI/worker/
+  # background-worker/backend, so the EP worker completion POST is dropped
+  # (httpx ConnectTimeout) until this rule exists.
+  kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-execution-plane-callback
+  namespace: ${AO_NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+      app.kubernetes.io/instance: ${AO_NAME}
+      app.kubernetes.io/managed-by: automation-orchestrator-operator
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: execution-plane-worker
+              app.kubernetes.io/instance: ${AO_NAME}
+              app.kubernetes.io/managed-by: automation-orchestrator-operator
+      ports:
+        - protocol: TCP
+          port: 8000
+EOF
+}
+
+_configure_ep_callback_url() {
+  local callback_url
+  callback_url=$(_ao_completion_callback_url)
+  echo "=== Set EP_COMPLETION_CALLBACK_URL on ${EP_WORKER_DEPLOY} ==="
+  kubectl set env "deploy/${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" \
+    "EP_COMPLETION_CALLBACK_URL=${callback_url}"
+  kubectl rollout status "deploy/${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" --timeout=180s
 }
 
 _kind_node_container() {
@@ -307,18 +251,38 @@ _prepull_node_image() {
 
 _enable_script_dispatch() {
   local image=$1
-  local images_json
+  local images_json ep_url callback_cn allowlist
   images_json=$(python3 -c 'import json, sys; print(json.dumps({"script": sys.argv[1]}))' "${image}")
-  echo "=== Enable script nodes on ${AO_NAME}-worker ==="
+  ep_url=$(_ep_api_url)
+  callback_cn="execution-plane-callback.ao.svc"
+  allowlist=$(kubectl get deploy "${AO_NAME}-backend" -n "${AO_NAMESPACE}" -o json | python3 -c '
+import json, sys
+deploy = json.load(sys.stdin)
+env = deploy["spec"]["template"]["spec"]["containers"][0]["env"]
+raw = next((e.get("value") or "[]" for e in env if e.get("name") == "APP_S2S_TLS_CN_ALLOWLIST"), "[]")
+cns = json.loads(raw)
+need = "execution-plane-callback.ao.svc"
+if need not in cns:
+    cns.append(need)
+print(json.dumps(cns))
+')
+  echo "=== Point ${AO_NAME}-worker at operator EP ${ep_url} ==="
   kubectl set env "deploy/${AO_NAME}-worker" -n "${AO_NAMESPACE}" \
     APP_SCRIPT_NODES_ENABLED=true \
-    "APP_NODE_CONTAINER_IMAGES=${images_json}"
+    "APP_NODE_CONTAINER_IMAGES=${images_json}" \
+    "APP_EP_API_URL=${ep_url}"
+  echo "=== Allow EP callback CN ${callback_cn} on ${AO_NAME}-backend ==="
+  kubectl set env "deploy/${AO_NAME}-backend" -n "${AO_NAMESPACE}" \
+    "APP_EP_CALLBACK_SERVICE_CN=${callback_cn}" \
+    "APP_S2S_TLS_CN_ALLOWLIST=${allowlist}" \
+    "APP_EP_API_URL=${ep_url}"
   kubectl rollout status "deploy/${AO_NAME}-worker" -n "${AO_NAMESPACE}" --timeout=180s
+  kubectl rollout status "deploy/${AO_NAME}-backend" -n "${AO_NAMESPACE}" --timeout=180s
 }
 
 _register_cluster_binding() {
   local issuer=$1 credential_ref=$2
-  kubectl get configmap kube-root-ca.crt -n "${NAMESPACE}" \
+  kubectl get configmap kube-root-ca.crt -n "${AO_NAMESPACE}" \
     -o jsonpath='{.data.ca\.crt}' > "${WORK_DIR}/cluster-ca.pem"
   python3 -c "
 import json, sys, uuid
@@ -341,13 +305,13 @@ json.dump(payload, sys.stdout)
 " "${CLUSTER_NAME}" "${ENDPOINT}" "${NAMESPACE}" "${issuer}" "${credential_ref}" "${WORK_DIR}/cluster-ca.pem" \
     > "${WORK_DIR}/binding.json"
 
-  kubectl exec -i -n "${NAMESPACE}" deploy/execution-plane-api -- \
+  kubectl exec -i -n "${AO_NAMESPACE}" "deploy/${EP_API_DEPLOY}" -- \
     /bin/sh -c 'cat > /tmp/jwt-primary.pem' < "${WORK_DIR}/jwt-primary.pem"
-  kubectl exec -i -n "${NAMESPACE}" deploy/execution-plane-api -- \
+  kubectl exec -i -n "${AO_NAMESPACE}" "deploy/${EP_API_DEPLOY}" -- \
     /bin/sh -c 'cat > /tmp/binding.json' < "${WORK_DIR}/binding.json"
 
-  echo "=== Register cluster binding via EP API ==="
-  kubectl exec -i -n "${NAMESPACE}" deploy/execution-plane-api -- \
+  echo "=== Register cluster binding via operator EP API ==="
+  kubectl exec -i -n "${AO_NAMESPACE}" "deploy/${EP_API_DEPLOY}" -- \
     /opt/app-root/src/.venv/bin/python - <<'PY'
 import json
 import time
@@ -428,19 +392,20 @@ with httpx.Client(verify=False, timeout=30.0) as client:
         raise SystemExit(f"listing execution targets failed ({targets.status_code}): {targets.text}")
     print(f"execution targets: {len(targets.json())}")
 PY
-  kubectl exec -n "${NAMESPACE}" deploy/execution-plane-api -- \
+  kubectl exec -n "${AO_NAMESPACE}" "deploy/${EP_API_DEPLOY}" -- \
     rm -f /tmp/jwt-primary.pem /tmp/binding.json >/dev/null 2>&1 || true
 }
 
 echo "=== Cluster ==="
 kubectl cluster-info
 kubectl get namespace "${AO_NAMESPACE}" >/dev/null
-echo "AO namespace ${AO_NAMESPACE} is present (operator remains there)"
-echo "EP image: ${EP_IMAGE}"
+echo "AO namespace ${AO_NAMESPACE} is present"
 
 WORK_DIR=$(mktemp -d)
 chmod 700 "${WORK_DIR}"
 trap _cleanup EXIT
+
+_require_operator_ep_opt_in
 
 echo "=== Apply ${INIT_YAML} ==="
 kubectl apply -f "${INIT_YAML}"
@@ -500,44 +465,22 @@ if [[ ! "${CREDENTIAL_REF}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-
   exit 1
 fi
 
-_ensure_ep_database
-_ensure_keys_and_tls
+_wait_for_operator_ep
+
+echo "=== Extract AO JWT from ${AO_NAME}-jwt-primary ==="
+_secret_data "${AO_NAME}-jwt-primary" "${AO_NAMESPACE}" jwt-primary.pem \
+  > "${WORK_DIR}/jwt-primary.pem"
+chmod 600 "${WORK_DIR}/jwt-primary.pem"
 
 AO_JWT_ISSUER=$(_ao_jwt_issuer)
 echo "AO JWT issuer: ${AO_JWT_ISSUER}"
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: execution-plane-config
-  namespace: ${NAMESPACE}
-data:
-  ao-jwt-issuer: "${AO_JWT_ISSUER}"
-  ao-completion-callback-url: "${AO_COMPLETION_CALLBACK_URL}"
-  ao-credential-resolution-callback-url: "${AO_CREDENTIAL_RESOLUTION_CALLBACK_URL}"
-EOF
-
-_apply_ep_workloads
-_wait_for_migrate
-
-echo "=== Wait for execution-plane-api ==="
-if ! kubectl rollout status deployment/execution-plane-api -n "${NAMESPACE}" --timeout=180s; then
-  kubectl get pods -n "${NAMESPACE}" -o wide
-  kubectl describe deployment/execution-plane-api -n "${NAMESPACE}" || true
-  exit 1
-fi
-echo "=== Wait for execution-plane-worker ==="
-if ! kubectl rollout status deployment/execution-plane-worker -n "${NAMESPACE}" --timeout=180s; then
-  kubectl get pods -n "${NAMESPACE}" -o wide
-  kubectl describe deployment/execution-plane-worker -n "${NAMESPACE}" || true
-  exit 1
-fi
-kubectl get pods -n "${NAMESPACE}" -o wide
 
 _register_cluster_binding "${AO_JWT_ISSUER}" "${CREDENTIAL_REF}"
 
+_allow_ep_callback_ingress
+_configure_ep_callback_url
 _prepull_node_image "${NODE_IMAGE}"
 _enable_script_dispatch "${NODE_IMAGE}"
 
-echo "execution-plane API and worker are up; script nodes dispatch ${NODE_IMAGE}"
-echo "AO operator was not modified; EP is served from ${NAMESPACE}"
+echo "operator Execution Plane is up; script nodes dispatch ${NODE_IMAGE}"
+echo "EP API: $(_ep_api_url)"

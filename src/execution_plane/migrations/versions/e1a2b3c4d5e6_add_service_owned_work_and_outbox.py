@@ -23,7 +23,18 @@ EP = "execution_plane"
 def upgrade() -> None:
     """Add scoped idempotency and durable events, removing Temporal tokens."""
     op.execute("REVOKE CONNECT ON DATABASE execution_plane FROM PUBLIC")
-    op.execute("GRANT CONNECT ON DATABASE execution_plane TO execution_plane_runtime")
+    # Compose / GHA create execution_plane_runtime before migrate. The operator
+    # Kind path (aap-dev) uses the database owner from ep-db-secret and never
+    # creates that role; GRANT would abort the job with UndefinedObjectError.
+    op.execute(
+        sa.text(
+            """DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'execution_plane_runtime') THEN
+                GRANT CONNECT ON DATABASE execution_plane TO execution_plane_runtime;
+            END IF;
+            END $$;"""
+        )
+    )
     connection = op.get_bind()
     legacy_count = connection.execute(
         sa.text("SELECT count(*) FROM execution_plane.work_items WHERE activity_handle IS NOT NULL")

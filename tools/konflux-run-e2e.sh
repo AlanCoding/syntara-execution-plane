@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Run tests/e2e against AO on the Konflux Kind cluster.
+# Run tests/e2e against AO and the Execution Plane on the Konflux Kind cluster.
 #
 # Intended for the Konflux test task after konflux-prepare-execution-plane.sh.
 # Uses the AO ingress port-forward left by deploy-ao (https://127.0.0.1:8443)
-# and the operator secret myao-initial-admin-password. Does not print the
-# password. Replaces konflux-run-hello-world-demo.sh.
+# and the operator secret myao-initial-admin-password. Port-forwards the
+# operator EP API (myao-execution-plane-api) and exports EP_API_URL plus the
+# AO JWT/CA the hello-world test needs. Does not print secrets.
 set -euo pipefail
 
 export PATH="${HOME}/.local/bin:${HOME}/aap-dev/bin:${PATH}"
@@ -15,7 +16,14 @@ export KUBECONFIG
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 AO_NAMESPACE="${AO_NAMESPACE:-aap27-next}"
+AO_NAME="${AO_NAME:-myao}"
+EP_NAMESPACE="${EP_NAMESPACE:-${AO_NAMESPACE}}"
+EP_API_SERVICE="${EP_API_SERVICE:-${AO_NAME}-execution-plane-api}"
+EP_WORKER_DEPLOY="${EP_WORKER_DEPLOY:-${AO_NAME}-execution-plane-worker}"
+EP_API_FORWARD_PORT="${EP_API_FORWARD_PORT:-18443}"
 E2E_DIR="${REPO_ROOT}/tests/e2e"
+EP_JWT_FILE="${EP_AO_JWT_PRIVATE_KEY_FILE:-/tmp/ep-e2e-jwt-primary.pem}"
+EP_CA_FILE="${EP_API_CA_FILE:-/tmp/ep-e2e-ca.pem}"
 
 if [[ ! -f "${KUBECONFIG}" ]]; then
   echo "ERROR: kubeconfig not found: ${KUBECONFIG}" >&2
@@ -48,6 +56,59 @@ _ao_api_base() {
   printf '%s' "https://127.0.0.1:18000"
 }
 
+_secret_to_file() {
+  local secret=$1 namespace=$2 key=$3 dest=$4
+  kubectl get secret "${secret}" -n "${namespace}" -o json | python3 -c "
+import base64, json, sys
+secret = json.load(sys.stdin)
+key = sys.argv[1]
+dest = sys.argv[2]
+data = secret.get('data') or {}
+if key not in data:
+    raise SystemExit(f'secret is missing key {key}')
+open(dest, 'wb').write(base64.b64decode(data[key]))
+" "${key}" "${dest}"
+  chmod 600 "${dest}"
+}
+
+_ep_api_reachable() {
+  local base=$1 code
+  code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 "${base}/healthz/ready" || true)
+  [[ "${code}" == "200" || "${code}" == "204" ]]
+}
+
+_ep_api_url() {
+  local base="${EP_API_URL:-}"
+  if [[ -n "${base}" ]] && _ep_api_reachable "${base}"; then
+    printf '%s' "${base}"
+    return 0
+  fi
+  echo "port-forwarding ${EP_NAMESPACE}/svc/${EP_API_SERVICE} to 127.0.0.1:${EP_API_FORWARD_PORT}" >&2
+  kubectl port-forward -n "${EP_NAMESPACE}" "svc/${EP_API_SERVICE}" \
+    "${EP_API_FORWARD_PORT}:8443" >/tmp/ep-api-pf.log 2>&1 &
+  sleep 4
+  printf '%s' "https://127.0.0.1:${EP_API_FORWARD_PORT}"
+}
+
+_ep_jwt_issuer() {
+  local issuer
+  issuer=$(kubectl get deploy "${EP_API_SERVICE}" -n "${EP_NAMESPACE}" \
+    -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name=='EP_AO_JWT_ISSUER')].value}" \
+    2>/dev/null || true)
+  if [[ -n "${issuer}" ]]; then
+    printf '%s' "${issuer%/}"
+    return 0
+  fi
+  issuer=$(kubectl get deploy "${AO_NAME}-backend" -n "${AO_NAMESPACE}" \
+    -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name=='APP_SERVER_PUBLIC_URL')].value}" \
+    2>/dev/null || true)
+  if [[ -n "${issuer}" ]]; then
+    printf '%s' "${issuer%/}"
+    return 0
+  fi
+  printf '%s' "https://0.0.0.0:8000"
+}
+
 _ensure_uv() {
   if command -v uv >/dev/null 2>&1; then
     return 0
@@ -59,15 +120,30 @@ _ensure_uv() {
 }
 
 _diagnose() {
-  echo "=== Diagnose execution-plane (e2e tests did not complete) ==="
-  kubectl set env deploy/myao-worker -n "${AO_NAMESPACE}" --list 2>/dev/null \
-    | grep -E 'APP_SCRIPT_NODES_ENABLED|APP_NODE_CONTAINER_IMAGES' || true
-  echo "=== execution-plane pods ==="
-  kubectl get pods -n execution-plane -o wide || true
-  echo "=== execution-plane events ==="
-  kubectl get events -n execution-plane --sort-by=.lastTimestamp 2>/dev/null | tail -40 || true
-  echo "=== execution-plane-worker logs ==="
-  kubectl logs -n execution-plane deploy/execution-plane-worker --tail=200 || true
+  echo "=== Diagnose operator Execution Plane (e2e tests did not complete) ==="
+  kubectl get configmap "${AO_NAME}-admin-settings" -n "${AO_NAMESPACE}" \
+    -o jsonpath='ENABLE_EXECUTION_PLANE={.data.ENABLE_EXECUTION_PLANE}{"\n"}' 2>/dev/null || true
+  kubectl set env "deploy/${AO_NAME}-worker" -n "${AO_NAMESPACE}" --list 2>/dev/null \
+    | grep -E 'APP_SCRIPT_NODES_ENABLED|APP_NODE_CONTAINER_IMAGES|APP_EP_API_URL' || true
+  echo "=== EP worker callback env ==="
+  kubectl set env "deploy/${EP_WORKER_DEPLOY}" -n "${EP_NAMESPACE}" --list 2>/dev/null \
+    | grep -E 'EP_COMPLETION_CALLBACK_URL' || true
+  echo "=== AO backend network policies ==="
+  kubectl get networkpolicy -n "${AO_NAMESPACE}" 2>/dev/null || true
+  echo "=== TCP to AO backend from EP worker ==="
+  kubectl exec -n "${EP_NAMESPACE}" "deploy/${EP_WORKER_DEPLOY}" -- \
+    python3 -c "import socket; s=socket.create_connection(('${AO_NAME}-backend.${AO_NAMESPACE}.svc.cluster.local', 8000), 5); print('tcp ok', s.getpeername()); s.close()" \
+    2>&1 || true
+  echo "=== operator EP pods ==="
+  kubectl get pods -n "${EP_NAMESPACE}" -l "app.kubernetes.io/component in (execution-plane-api,execution-plane-worker)" -o wide || true
+  echo "=== dispatcher namespace ==="
+  kubectl get pods,jobs -n execution-plane -o wide || true
+  echo "=== ${EP_WORKER_DEPLOY} logs ==="
+  kubectl logs -n "${EP_NAMESPACE}" "deploy/${EP_WORKER_DEPLOY}" --tail=200 || true
+  echo "=== ${EP_API_SERVICE} logs ==="
+  kubectl logs -n "${EP_NAMESPACE}" "deploy/${EP_API_SERVICE}" --tail=80 || true
+  echo "=== myao-backend logs ==="
+  kubectl logs -n "${AO_NAMESPACE}" deploy/"${AO_NAME}"-backend --tail=80 || true
   echo "=== myao-worker logs ==="
   kubectl logs -n "${AO_NAMESPACE}" deploy/myao-worker --tail=80 || true
 }
@@ -78,7 +154,16 @@ if [[ -z "${password}" ]]; then
   exit 1
 fi
 base=$(_ao_api_base)
-echo "=== Running tests/e2e (${base}) ==="
+ep_base=$(_ep_api_url)
+if ! _ep_api_reachable "${ep_base}"; then
+  echo "ERROR: Execution Plane API not reachable at ${ep_base}" >&2
+  cat /tmp/ep-api-pf.log >&2 || true
+  exit 1
+fi
+_secret_to_file "${AO_NAME}-jwt-primary" "${AO_NAMESPACE}" jwt-primary.pem "${EP_JWT_FILE}"
+_secret_to_file "${AO_NAME}-internal-ca" "${AO_NAMESPACE}" ca.crt "${EP_CA_FILE}"
+ep_issuer=$(_ep_jwt_issuer)
+echo "=== Running tests/e2e (AO ${base}, EP ${ep_base}) ==="
 
 if ! _ensure_uv; then
   echo "ERROR: uv is required to run tests/e2e" >&2
@@ -97,8 +182,12 @@ set +e
 # --no-project avoids compiling EP native deps on the Kind VM. --confcutdir
 # keeps tests/conftest.py (which imports execution_plane) out of collection.
 ADMIN_PASSWORD="${password}" BASE="${base}" \
+  EP_API_URL="${ep_base}" \
+  EP_API_CA_FILE="${EP_CA_FILE}" \
+  EP_AO_JWT_PRIVATE_KEY_FILE="${EP_JWT_FILE}" \
+  EP_AO_JWT_ISSUER="${ep_issuer}" \
   E2E_POLL_TIMEOUT="${E2E_POLL_TIMEOUT:-180}" \
-  uv run --directory "${REPO_ROOT}" --no-project --with "pytest>=9,<10" --with "httpx>=0.28" -- \
+  uv run --directory "${REPO_ROOT}" --no-project --with "pytest>=9,<10" --with "httpx>=0.28" --with "PyJWT[crypto]>=2.13" -- \
     pytest --confcutdir="${E2E_DIR}" "${E2E_DIR}" \
       -m e2e -v --tb=short --log-cli-level=INFO --color=no
 e2e_rc=$?
