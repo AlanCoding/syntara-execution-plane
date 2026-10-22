@@ -55,8 +55,6 @@ spec:
       value: "true"
     - name: prefetch-input
       value: '[{"type": "pip", "path": "."}, {"type": "rpm", "path": "."}]'
-    - name: prefetch-mode
-      value: permissive
   pipelineRef:
     params:
       - name: name
