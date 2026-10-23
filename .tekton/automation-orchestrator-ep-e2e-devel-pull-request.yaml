@@ -50,7 +50,8 @@ spec:
       source, enable AO_EXECUTION_PLANE, then run tests/e2e against
       myao-execution-plane-api. The prebuilt operator bundle ignores
       ENABLE_EXECUTION_PLANE. Does not run AO API tests. AO must dispatch
-      script activities to EP (feat/ANSTRAT-1803 until that lands on devel).
+      script activities to EP and resolve cluster credential_ref
+      (syntara#1006 on feat/ANSTRAT-1803 until those land on devel).
 
       Promote prepare-execution-plane into aap-konflux-pipelines when this path
       is proven; then restore a bundle pipelineRef.
@@ -82,15 +83,20 @@ spec:
         type: string
         description: >
           Branch, tag, or SHA of syntara-orchestration/syntara for deploy-ao.
-          Must include EP script dispatch (feat/ANSTRAT-1803) until that lands
-          on devel; otherwise hello-world completes in Temporal with no EP work item.
-        default: feat/ANSTRAT-1803
+          Must include EP script dispatch (feat/ANSTRAT-1803) and
+          credential.resolve on /api/execution_plane/v1/commands
+          (syntara#1006 / 70971e34645988ba9f4784c2d422d9758ff9c507) until
+          those land on devel. Without dispatch, hello-world completes in
+          Temporal with no EP work item. Without credential.resolve, the Kind
+          target goes degraded and placement finds no match.
+        default: 70971e34645988ba9f4784c2d422d9758ff9c507
       - name: ao-pr-number
         type: string
         description: >
           Optional syntara PR number so deploy-ao can fetch a fork head SHA.
           Leave empty to check out ao-revision from the base syntara repo.
-        default: ""
+          1006 is manstis/syntara feat/ANSTRAT-1803-AAP-97919.
+        default: "1006"
       - name: oci-secret
         type: string
         default: quay-aap-ci-pipeline-artifacts-publisher

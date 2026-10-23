@@ -7,12 +7,12 @@
 #   1. Applies deploy/kubernetes/execution-target/rbac.yaml (dispatcher SA
 #      and Job namespace for Kind cluster-binding).
 #   2. Waits for the operator EP API and worker.
-#   3. Registers the Kind cluster as an EP cluster-binding via the EP API.
-#   4. Points myao-worker at the operator EP (APP_EP_API_URL), sets
+#   3. Points myao-worker at the operator EP (APP_EP_API_URL), sets
 #      EP_COMPLETION_CALLBACK_URL and EP_CREDENTIAL_RESOLUTION_CALLBACK_URL
-#      on the operator EP worker, allows the operator callback CN on the AO
-#      backend, and opens backend ingress from execution-plane-worker so the
-#      completion and credential-resolution callbacks are not dropped.
+#      to AO's /api/execution_plane/v1/commands ingress, allows the operator
+#      callback CN on the AO backend, and opens backend ingress from
+#      execution-plane-worker so those callbacks are not dropped.
+#   4. Registers the Kind cluster as an EP cluster-binding via the EP API.
 #   5. Pre-pulls the script-node image.
 #
 # CREDENTIAL_REF may name an existing AO credential that can access the Kind
@@ -109,11 +109,7 @@ _create_ao_credential() {
       --insecure
 }
 
-_ao_completion_callback_url() {
-  printf '%s' "https://${AO_NAME}-backend.${AO_NAMESPACE}.svc.cluster.local:8000/api/execution_plane/v1/events"
-}
-
-_ao_credential_resolution_callback_url() {
+_ao_command_ingress_url() {
   printf '%s' "https://${AO_NAME}-backend.${AO_NAMESPACE}.svc.cluster.local:8000/api/execution_plane/v1/commands"
 }
 
@@ -219,8 +215,8 @@ EOF
 _configure_ep_callback_url() {
   local completion_url resolution_url ca_path cert_path key_path
   local -a env_args
-  completion_url=$(_ao_completion_callback_url)
-  resolution_url=$(_ao_credential_resolution_callback_url)
+  completion_url=$(_ao_command_ingress_url)
+  resolution_url=$(_ao_command_ingress_url)
   ca_path=$(kubectl get deploy "${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" \
     -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name=='EP_CALLBACK_CA_CERT_PATH')].value}" \
     2>/dev/null || true)
@@ -505,10 +501,9 @@ chmod 600 "${WORK_DIR}/jwt-primary.pem"
 AO_JWT_ISSUER=$(_ao_jwt_issuer)
 echo "AO JWT issuer: ${AO_JWT_ISSUER}"
 
-_register_cluster_binding "${AO_JWT_ISSUER}" "${CREDENTIAL_REF}"
-
 _allow_ep_callback_ingress
 _configure_ep_callback_url
+_register_cluster_binding "${AO_JWT_ISSUER}" "${CREDENTIAL_REF}"
 _prepull_node_image "${NODE_IMAGE}"
 _enable_script_dispatch "${NODE_IMAGE}"
 
