@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import builtins
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -19,7 +19,6 @@ from execution_plane.store_base import StoreBase
 
 if TYPE_CHECKING:
     import builtins
-    import uuid
     from collections.abc import Sequence
 
 
