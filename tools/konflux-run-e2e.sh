@@ -142,10 +142,20 @@ _diagnose() {
   kubectl logs -n "${EP_NAMESPACE}" "deploy/${EP_WORKER_DEPLOY}" --tail=200 || true
   echo "=== ${EP_API_SERVICE} logs ==="
   kubectl logs -n "${EP_NAMESPACE}" "deploy/${EP_API_SERVICE}" --tail=80 || true
-  echo "=== myao-backend logs ==="
-  kubectl logs -n "${AO_NAMESPACE}" deploy/"${AO_NAME}"-backend --tail=80 || true
-  echo "=== myao-worker logs ==="
-  kubectl logs -n "${AO_NAMESPACE}" deploy/myao-worker --tail=80 || true
+  echo "=== myao-backend logs (all replicas) ==="
+  kubectl get pods -n "${AO_NAMESPACE}" \
+    -l "app.kubernetes.io/component=backend,app.kubernetes.io/instance=${AO_NAME}" \
+    -o name | while read -r pod; do
+    echo "--- ${pod} ---"
+    kubectl logs -n "${AO_NAMESPACE}" "${pod}" --tail=80 || true
+  done
+  echo "=== myao-worker logs (all replicas) ==="
+  kubectl get pods -n "${AO_NAMESPACE}" \
+    -l "app.kubernetes.io/component=worker,app.kubernetes.io/instance=${AO_NAME}" \
+    -o name | while read -r pod; do
+    echo "--- ${pod} ---"
+    kubectl logs -n "${AO_NAMESPACE}" "${pod}" --tail=120 || true
+  done
 }
 
 password=$(_ao_admin_password)

@@ -7,13 +7,14 @@
 #   1. Applies deploy/kubernetes/execution-target/rbac.yaml (dispatcher SA
 #      and Job namespace for Kind cluster-binding).
 #   2. Waits for the operator EP API and worker.
-#   3. Points myao-worker at the operator EP (APP_EP_API_URL), sets
-#      EP_COMPLETION_CALLBACK_URL and EP_CREDENTIAL_RESOLUTION_CALLBACK_URL
-#      to AO's /api/execution_plane/v1/commands ingress, allows the operator
-#      callback CN on the AO backend, and opens backend ingress from
-#      execution-plane-worker so those callbacks are not dropped.
-#   4. Registers the Kind cluster as an EP cluster-binding via the EP API.
-#   5. Pre-pulls the script-node image.
+#   3. Opens backend ingress from execution-plane-worker and allows the
+#      operator callback CN on the AO backend before EP starts posting.
+#   4. Sets EP_COMPLETION_CALLBACK_URL and
+#      EP_CREDENTIAL_RESOLUTION_CALLBACK_URL to AO's
+#      /api/execution_plane/v1/commands ingress.
+#   5. Registers the Kind cluster as an EP cluster-binding via the EP API.
+#   6. Points myao-worker at the operator EP (APP_EP_API_URL) and pre-pulls
+#      the script-node image.
 #
 # CREDENTIAL_REF may name an existing AO credential that can access the Kind
 # cluster's dispatcher service account. When omitted, one is created or
@@ -275,12 +276,10 @@ _prepull_node_image() {
   echo "pre-pulled ${image} on ${node}"
 }
 
-_enable_script_dispatch() {
-  local image=$1
-  local images_json ep_url callback_cn allowlist
-  images_json=$(python3 -c 'import json, sys; print(json.dumps({"script": sys.argv[1]}))' "${image}")
-  ep_url=$(_ep_api_url)
+_allow_ep_callback_identity() {
+  local callback_cn allowlist ep_url
   callback_cn="execution-plane-callback.ao.svc"
+  ep_url=$(_ep_api_url)
   allowlist=$(kubectl get deploy "${AO_NAME}-backend" -n "${AO_NAMESPACE}" -o json | python3 -c '
 import json, sys
 deploy = json.load(sys.stdin)
@@ -292,18 +291,25 @@ if need not in cns:
     cns.append(need)
 print(json.dumps(cns))
 ')
-  echo "=== Point ${AO_NAME}-worker at operator EP ${ep_url} ==="
-  kubectl set env "deploy/${AO_NAME}-worker" -n "${AO_NAMESPACE}" \
-    APP_SCRIPT_NODES_ENABLED=true \
-    "APP_NODE_CONTAINER_IMAGES=${images_json}" \
-    "APP_EP_API_URL=${ep_url}"
   echo "=== Allow EP callback CN ${callback_cn} on ${AO_NAME}-backend ==="
   kubectl set env "deploy/${AO_NAME}-backend" -n "${AO_NAMESPACE}" \
     "APP_EP_CALLBACK_SERVICE_CN=${callback_cn}" \
     "APP_S2S_TLS_CN_ALLOWLIST=${allowlist}" \
     "APP_EP_API_URL=${ep_url}"
-  kubectl rollout status "deploy/${AO_NAME}-worker" -n "${AO_NAMESPACE}" --timeout=180s
   kubectl rollout status "deploy/${AO_NAME}-backend" -n "${AO_NAMESPACE}" --timeout=180s
+}
+
+_enable_script_dispatch() {
+  local image=$1
+  local images_json ep_url
+  images_json=$(python3 -c 'import json, sys; print(json.dumps({"script": sys.argv[1]}))' "${image}")
+  ep_url=$(_ep_api_url)
+  echo "=== Point ${AO_NAME}-worker at operator EP ${ep_url} ==="
+  kubectl set env "deploy/${AO_NAME}-worker" -n "${AO_NAMESPACE}" \
+    APP_SCRIPT_NODES_ENABLED=true \
+    "APP_NODE_CONTAINER_IMAGES=${images_json}" \
+    "APP_EP_API_URL=${ep_url}"
+  kubectl rollout status "deploy/${AO_NAME}-worker" -n "${AO_NAMESPACE}" --timeout=180s
 }
 
 _register_cluster_binding() {
@@ -502,6 +508,7 @@ AO_JWT_ISSUER=$(_ao_jwt_issuer)
 echo "AO JWT issuer: ${AO_JWT_ISSUER}"
 
 _allow_ep_callback_ingress
+_allow_ep_callback_identity
 _configure_ep_callback_url
 _register_cluster_binding "${AO_JWT_ISSUER}" "${CREDENTIAL_REF}"
 _prepull_node_image "${NODE_IMAGE}"
