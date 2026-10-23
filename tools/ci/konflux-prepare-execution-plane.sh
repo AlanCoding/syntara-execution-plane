@@ -9,9 +9,10 @@
 #   2. Waits for the operator EP API and worker.
 #   3. Registers the Kind cluster as an EP cluster-binding via the EP API.
 #   4. Points myao-worker at the operator EP (APP_EP_API_URL), sets
-#      EP_COMPLETION_CALLBACK_URL on the operator EP worker, allows the
-#      operator callback CN on the AO backend, and opens backend ingress
-#      from execution-plane-worker so the completion callback is not dropped.
+#      EP_COMPLETION_CALLBACK_URL and EP_CREDENTIAL_RESOLUTION_CALLBACK_URL
+#      on the operator EP worker, allows the operator callback CN on the AO
+#      backend, and opens backend ingress from execution-plane-worker so the
+#      completion and credential-resolution callbacks are not dropped.
 #   5. Pre-pulls the script-node image.
 #
 # CREDENTIAL_REF may name an existing AO credential that can access the Kind
@@ -110,6 +111,10 @@ _create_ao_credential() {
 
 _ao_completion_callback_url() {
   printf '%s' "https://${AO_NAME}-backend.${AO_NAMESPACE}.svc.cluster.local:8000/api/execution_plane/v1/events"
+}
+
+_ao_credential_resolution_callback_url() {
+  printf '%s' "https://${AO_NAME}-backend.${AO_NAMESPACE}.svc.cluster.local:8000/api/execution_plane/v1/commands"
 }
 
 _ep_api_url() {
@@ -212,11 +217,36 @@ EOF
 }
 
 _configure_ep_callback_url() {
-  local callback_url
-  callback_url=$(_ao_completion_callback_url)
-  echo "=== Set EP_COMPLETION_CALLBACK_URL on ${EP_WORKER_DEPLOY} ==="
-  kubectl set env "deploy/${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" \
-    "EP_COMPLETION_CALLBACK_URL=${callback_url}"
+  local completion_url resolution_url ca_path cert_path key_path
+  local -a env_args
+  completion_url=$(_ao_completion_callback_url)
+  resolution_url=$(_ao_credential_resolution_callback_url)
+  ca_path=$(kubectl get deploy "${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" \
+    -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name=='EP_CALLBACK_CA_CERT_PATH')].value}" \
+    2>/dev/null || true)
+  cert_path=$(kubectl get deploy "${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" \
+    -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name=='EP_CALLBACK_CERT_PATH')].value}" \
+    2>/dev/null || true)
+  key_path=$(kubectl get deploy "${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" \
+    -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name=='EP_CALLBACK_KEY_PATH')].value}" \
+    2>/dev/null || true)
+  env_args=(
+    "EP_COMPLETION_CALLBACK_URL=${completion_url}"
+    "EP_CREDENTIAL_RESOLUTION_CALLBACK_URL=${resolution_url}"
+  )
+  if [[ -n "${ca_path}" ]]; then
+    env_args+=("EP_CREDENTIAL_RESOLUTION_CALLBACK_CA_CERT_PATH=${ca_path}")
+  fi
+  if [[ -n "${cert_path}" && -n "${key_path}" ]]; then
+    env_args+=(
+      "EP_CREDENTIAL_RESOLUTION_CALLBACK_CERT_PATH=${cert_path}"
+      "EP_CREDENTIAL_RESOLUTION_CALLBACK_KEY_PATH=${key_path}"
+    )
+  fi
+  echo "=== Set EP callback URLs on ${EP_WORKER_DEPLOY} ==="
+  echo "EP_COMPLETION_CALLBACK_URL=${completion_url}"
+  echo "EP_CREDENTIAL_RESOLUTION_CALLBACK_URL=${resolution_url}"
+  kubectl set env "deploy/${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" "${env_args[@]}"
   kubectl rollout status "deploy/${EP_WORKER_DEPLOY}" -n "${AO_NAMESPACE}" --timeout=180s
 }
 

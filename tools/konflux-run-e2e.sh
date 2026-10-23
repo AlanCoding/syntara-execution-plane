@@ -127,7 +127,7 @@ _diagnose() {
     | grep -E 'APP_SCRIPT_NODES_ENABLED|APP_NODE_CONTAINER_IMAGES|APP_EP_API_URL' || true
   echo "=== EP worker callback env ==="
   kubectl set env "deploy/${EP_WORKER_DEPLOY}" -n "${EP_NAMESPACE}" --list 2>/dev/null \
-    | grep -E 'EP_COMPLETION_CALLBACK_URL' || true
+    | grep -E 'EP_COMPLETION_CALLBACK_URL|EP_CREDENTIAL_RESOLUTION_CALLBACK' || true
   echo "=== AO backend network policies ==="
   kubectl get networkpolicy -n "${AO_NAMESPACE}" 2>/dev/null || true
   echo "=== TCP to AO backend from EP worker ==="
