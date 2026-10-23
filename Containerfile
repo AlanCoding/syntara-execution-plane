@@ -56,6 +56,10 @@ RUN alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
 
 WORKDIR /opt/app-root/src
 COPY LICENSE /licenses/LICENSE
+# AAP-99675: ship the execution-target dispatcher RBAC (install pre-req) inside
+# the image so installers can extract the manifest matching this build, e.g.:
+#   podman create $IMG && podman cp <cid>:/manifests/execution-target-rbac.yaml -
+COPY deploy/kubernetes/execution-target/rbac.yaml /manifests/execution-target-rbac.yaml
 COPY --from=builder /opt/app-root/src/alembic.ini ./alembic.ini
 COPY --from=builder /opt/app-root/src/src/execution_plane/migrations ./src/execution_plane/migrations
 COPY --from=builder /opt/app-root/src/.venv /opt/app-root/src/.venv
