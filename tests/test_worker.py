@@ -216,7 +216,6 @@ async def test_run_worker_completes_cleanup_after_shutdown_signal(monkeypatch: p
 
     monkeypatch.setattr(worker, "_listen_loop", blocked_listener)
     monkeypatch.setattr(worker, "_poll_loop", _finished_poller)
-    monkeypatch.setattr(worker, "run_cluster_binding_reconciler", _finished_reconciler)
     monkeypatch.setattr(worker, "run_orphan_policy_reconciler", _finished_policy_reconciler)
 
     runner = asyncio.create_task(run_until_shutdown(worker.run_worker("postgresql+asyncpg://localhost/syntara")))
@@ -235,10 +234,6 @@ async def _finished_listener(_database_url: str, _wakeup_event: object) -> None:
 
 
 async def _finished_poller(*_args: object) -> None:
-    return None
-
-
-async def _finished_reconciler(_database_url: str) -> None:
     return None
 
 

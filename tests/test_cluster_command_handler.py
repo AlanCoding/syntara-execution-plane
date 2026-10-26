@@ -110,7 +110,7 @@ async def test_cluster_register_cleanses_internal_labels(monkeypatch: pytest.Mon
         name="cluster-a",
         endpoint="https://cluster.example",
         namespace="ep",
-        credential="secret",
+        credential_ref=uuid.uuid4(),
         labels={"team": "platform", "_cluster_id": "spoofed", "_internal": "spoofed"},
     )
 
@@ -141,7 +141,7 @@ async def test_cluster_register_returns_cluster_id_in_receipt(monkeypatch: pytes
         name="cluster-a",
         endpoint="https://cluster.example",
         namespace="ep",
-        credential="secret",
+        credential_ref=uuid.uuid4(),
     )
 
     context = _mock_context(monkeypatch, session)
@@ -172,7 +172,7 @@ async def test_cluster_register_is_idempotent_for_same_revision(monkeypatch: pyt
         name="cluster-a",
         endpoint="https://cluster.example",
         namespace="ep",
-        credential="secret",
+        credential_ref=uuid.uuid4(),
     )
     context = _mock_context(monkeypatch, session)
     result = await ClusterRegisterCommandHandler().handle(Mock(spec=MessageEnvelope), payload, context)
@@ -200,7 +200,7 @@ async def test_cluster_register_rejects_stale_revision(monkeypatch: pytest.Monke
         name="cluster-a",
         endpoint="https://cluster.example",
         namespace="ep",
-        credential="secret",
+        credential_ref=uuid.uuid4(),
     )
     context = _mock_context(monkeypatch, session)
     with pytest.raises(ProtocolConflict):
@@ -236,7 +236,7 @@ async def test_cluster_provision_passes_is_default_to_registrar(
         name="cluster-a",
         endpoint="https://cluster.example",
         namespace="ep",
-        credential="secret",
+        credential_ref=uuid.uuid4(),
         is_default=True,
     )
 
