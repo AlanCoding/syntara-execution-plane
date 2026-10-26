@@ -201,20 +201,64 @@ async def _poll_loop(
     settings: EPSettings,
     wakeup_event: asyncio.Event,
 ) -> None:
-    """Claim one work item at a time; sleep between polls when queue is empty."""
-    logger.info("Execution Plane worker started, polling for work items")
+    """Claim work and dispatch items concurrently, bounded by settings.
+
+    Each claimed item runs its full cold-start lifecycle in its own task;
+    at most ``settings.max_concurrent_dispatches`` items are in flight, so a
+    burst of parallel-branch work items executes in parallel instead of
+    queueing behind a single dispatch. Claims are only taken while a dispatch
+    slot is free, so no item sits claimed-but-unprocessed.
+    """
+    logger.info(
+        "Execution Plane worker started, polling for work items",
+        max_concurrent_dispatches=settings.max_concurrent_dispatches,
+    )
+    inflight: set[asyncio.Task[None]] = set()
     wakeup_event.set()  # process any items already present at startup
     while True:
-        item = None
-        try:
-            item = await work_scheduler.claim_and_place_work()
-            if item:
-                logger.info("Claimed work item", work_item_id=str(item.id))
-                await _process_item(item, work_progress, target_queries, worker_managers, settings)
-        except Exception:
-            logger.exception("Error in polling loop, will retry")
+        # Reap finished dispatch tasks; _process_item handles per-item errors
+        # itself, so an exception here is a bookkeeping bug worth logging.
+        for task in [t for t in inflight if t.done()]:
+            inflight.discard(task)
+            exc = task.exception()
+            if exc is not None:
+                logger.error(
+                    "Work item dispatch task failed",
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
 
-        if not item:
+        # Claim while a dispatch slot is free and work is queued.
+        while len(inflight) < settings.max_concurrent_dispatches:
+            item = None
+            try:
+                item = await work_scheduler.claim_and_place_work()
+            except Exception:
+                logger.exception("Error claiming work item, will retry")
+            if item is None:
+                break
+            logger.info("Claimed work item", work_item_id=str(item.id))
+            inflight.add(
+                asyncio.create_task(
+                    _process_item(item, work_progress, target_queries, worker_managers, settings),
+                    name=f"ep-dispatch-{item.id}",
+                )
+            )
+
+        if inflight:
+            # Wait for a dispatch slot to free up, for new work to be notified,
+            # or for the poll interval to elapse (re-claim safety net).
+            wakeup_event.clear()
+            notify_task = asyncio.create_task(wakeup_event.wait())
+            try:
+                await asyncio.wait(
+                    set(inflight) | {notify_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                    timeout=POLL_INTERVAL_SECONDS,
+                )
+            finally:
+                notify_task.cancel()
+        else:
             wakeup_event.clear()
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(wakeup_event.wait(), timeout=POLL_INTERVAL_SECONDS)
