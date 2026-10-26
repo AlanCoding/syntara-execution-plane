@@ -21,11 +21,11 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ClusterRegistration:
-    """Credential-bearing input passed only to the discovery mechanism."""
+    """Credential reference passed to the discovery mechanism."""
 
     name: str
     endpoint: str
-    api_key: str = field(repr=False)
+    credential_ref: uuid.UUID = field(repr=False)
     labels: dict[str, str]
 
 
@@ -36,7 +36,7 @@ class DiscoveredExecutionTarget:
     name: str
     backend_type: BackendType
     endpoint: str
-    api_key: str = field(repr=False)
+    credential_ref: uuid.UUID = field(repr=False)
     placement: ExecutionTargetPlacement
     is_default: bool = False
 
@@ -101,7 +101,7 @@ class ClusterRegistrar:
         self,
         name: str,
         endpoint: str,
-        api_key: str,
+        credential_ref: uuid.UUID,
         created_by: uuid.UUID,
         labels: dict[str, str] | None = None,
         *,
@@ -109,8 +109,10 @@ class ClusterRegistrar:
         is_default: bool = False,
     ) -> Cluster:
         """Persist first, discover second, and persist the resulting state."""
-        registration = ClusterRegistration(name, endpoint, api_key, labels or {})
-        cluster = await self._store.create(name, endpoint, api_key, created_by, labels, cluster_type=cluster_type)
+        registration = ClusterRegistration(name, endpoint, credential_ref, labels or {})
+        cluster = await self._store.create(
+            name, endpoint, credential_ref, created_by, labels, cluster_type=cluster_type
+        )
         try:
             result = self._discovery.discover(registration)
         except Exception:  # noqa: BLE001
@@ -140,7 +142,7 @@ class ClusterRegistrar:
                     backend_type=target.backend_type,
                     endpoint=target.endpoint,
                     placement=target.placement,
-                    api_key=target.api_key,
+                    credential_ref=target.credential_ref,
                     is_default=target.is_default,
                     created_by=created_by,
                 )
@@ -161,7 +163,7 @@ class ClusterRegistrar:
         self,
         name: str,
         endpoint: str,
-        api_key: str,
+        credential_ref: uuid.UUID,
         placement: ExecutionTargetPlacement,
         created_by: uuid.UUID,
         labels: dict[str, str] | None = None,
@@ -185,7 +187,7 @@ class ClusterRegistrar:
                 return await self._reactivate(
                     existing,
                     endpoint,
-                    api_key,
+                    credential_ref,
                     created_by,
                     labels,
                     is_default=is_default,
@@ -199,7 +201,7 @@ class ClusterRegistrar:
                 updated_by=created_by,
                 name=name,
                 endpoint=endpoint,
-                api_key=api_key,
+                credential_ref=credential_ref,
                 ca_certificate=ca_certificate,
                 labels=labels,
                 project_ids=project_ids,
@@ -212,7 +214,7 @@ class ClusterRegistrar:
         cluster = await self._store.create(
             name,
             endpoint,
-            api_key,
+            credential_ref,
             created_by,
             labels,
             cluster_type=cluster_type,
@@ -228,7 +230,7 @@ class ClusterRegistrar:
                 name=name,
                 backend_type=BackendType.VANILLA_K8S,
                 endpoint=endpoint,
-                api_key=api_key,
+                credential_ref=credential_ref,
                 placement=placement,
                 is_default=True,
                 created_by=created_by,
@@ -251,7 +253,7 @@ class ClusterRegistrar:
         updated_by: uuid.UUID,
         name: str | None = None,
         endpoint: str | None = None,
-        api_key: str | None = None,
+        credential_ref: uuid.UUID | None = None,
         ca_certificate: str | None = None,
         labels: dict[str, str] | None = None,
         is_default: bool | None = None,
@@ -262,7 +264,7 @@ class ClusterRegistrar:
             updated_by=updated_by,
             name=name,
             endpoint=endpoint,
-            api_key=api_key,
+            credential_ref=credential_ref,
             ca_certificate=ca_certificate,
             labels=labels,
         )
@@ -277,7 +279,7 @@ class ClusterRegistrar:
         self,
         cluster: Cluster,
         endpoint: str,
-        api_key: str,
+        credential_ref: uuid.UUID,
         updated_by: uuid.UUID,
         labels: dict[str, str] | None = None,
         *,
@@ -291,7 +293,7 @@ class ClusterRegistrar:
             cluster.id,
             updated_by=updated_by,
             endpoint=endpoint,
-            api_key=api_key,
+            credential_ref=credential_ref,
             ca_certificate=ca_certificate,
             labels=labels,
             project_ids=project_ids,

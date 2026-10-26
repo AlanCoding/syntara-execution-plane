@@ -32,7 +32,7 @@ class _ClusterUpdateFields(TypedDict, total=False):
 
     name: str
     endpoint: str
-    api_key: str
+    credential_ref: uuid.UUID
     ca_certificate: str
     enabled: bool
     labels: dict[str, str]
@@ -112,7 +112,7 @@ async def _provision_cluster(command: ClusterRegister, context: EPCommandContext
     cluster = await registrar.provision(
         command.name,
         command.endpoint,
-        command.credential,
+        command.credential_ref,
         KubernetesPlacement(namespace=command.namespace),
         SYSTEM_ACTOR_ID,
         desired_labels,
@@ -133,8 +133,8 @@ def _cluster_update_fields(command: ClusterUpdate) -> _ClusterUpdateFields:
         kwargs["name"] = command.name
     if command.endpoint is not None:
         kwargs["endpoint"] = command.endpoint
-    if command.credential is not None:
-        kwargs["api_key"] = command.credential
+    if command.credential_ref is not None:
+        kwargs["credential_ref"] = command.credential_ref
     if command.ca_certificate is not None:
         kwargs["ca_certificate"] = command.ca_certificate
     if command.enabled is not None:
