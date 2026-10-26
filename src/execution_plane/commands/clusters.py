@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from execution_plane.cluster.cluster_registrar import ClusterRegistrar, NoopDiscoveryMechanism
 from execution_plane.cluster.cluster_store import ClusterStore, DefaultClusterError
+from execution_plane.commands.constants import SYSTEM_ACTOR_ID
 from execution_plane.commands.context import EPCommandContext
 from execution_plane.execution_target.execution_target_store import ExecutionTargetStore
 from execution_plane.labels import user_labels
@@ -25,8 +26,6 @@ from execution_plane_client.errors import ProtocolConflict, UnsupportedCommand
 from execution_plane_client.handlers import HandlingResult
 from execution_plane_client.protocol import MessageEnvelope, ResourceReference
 
-SYSTEM_ACTOR_ID = uuid.UUID(int=0)
-
 
 class _ClusterUpdateFields(TypedDict, total=False):
     """Optional keyword arguments accepted by ClusterStore.update."""
@@ -35,6 +34,7 @@ class _ClusterUpdateFields(TypedDict, total=False):
     endpoint: str
     api_key: str
     ca_certificate: str
+    enabled: bool
     labels: dict[str, str]
     project_ids: list[uuid.UUID] | None
 
@@ -137,6 +137,8 @@ def _cluster_update_fields(command: ClusterUpdate) -> _ClusterUpdateFields:
         kwargs["api_key"] = command.credential
     if command.ca_certificate is not None:
         kwargs["ca_certificate"] = command.ca_certificate
+    if command.enabled is not None:
+        kwargs["enabled"] = command.enabled
     if command.labels is not None:
         kwargs["labels"] = user_labels(command.labels)
     if "project_ids" in command.model_fields_set:
@@ -167,13 +169,6 @@ class ClusterUpdateCommandHandler:
                 raise ProtocolConflict
             if (command.enabled is False or command.is_default is False) and existing.is_default:
                 raise DefaultClusterError
-
-        if command.enabled is False:
-            cluster = await cluster_store.request_delete(existing.id, SYSTEM_ACTOR_ID)
-            await cluster_store.update(
-                existing.id, updated_by=SYSTEM_ACTOR_ID, source_revision=command.desired_revision
-            )
-            return _cluster_result(cluster, command.desired_revision)
 
         cluster = await cluster_store.update(
             existing.id,

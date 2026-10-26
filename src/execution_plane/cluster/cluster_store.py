@@ -180,7 +180,7 @@ class ClusterStore(StoreBase):
                 return None
             return self._without_secret(cluster)
 
-    async def update(
+    async def update(  # noqa: C901
         self,
         cluster_id: uuid.UUID,
         *,
@@ -189,6 +189,7 @@ class ClusterStore(StoreBase):
         endpoint: str | None = None,
         credential_ref: uuid.UUID | None = None,
         ca_certificate: str | None = None,
+        enabled: bool | None = None,
         labels: dict[str, str] | None = None,
         project_ids: _UnsetType | builtins.list[uuid.UUID] | None = _UNSET,
         source_revision: int | None = None,
@@ -207,6 +208,8 @@ class ClusterStore(StoreBase):
                     cluster.credential_ref = credential_ref
                 if ca_certificate is not None:
                     cluster.ca_certificate = ca_certificate
+                if enabled is not None:
+                    cluster.enabled = enabled
                 if labels is not None:
                     cluster.labels = merge_user_labels(cluster.labels, labels)
                 if not isinstance(project_ids, _UnsetType):
