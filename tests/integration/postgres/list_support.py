@@ -95,7 +95,7 @@ async def seed_list_dataset(session, path: str, db_url: str):
                     source_integration_id=resource_id,
                     name=NAMES[index],
                     endpoint=values["endpoint"],
-                    api_key="secret",
+                    credential_ref=uuid.uuid4(),
                     status=ClusterStatus(status),
                     enabled=values["enabled"],
                     labels=labels,

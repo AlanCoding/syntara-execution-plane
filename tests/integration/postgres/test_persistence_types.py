@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
@@ -98,7 +99,7 @@ async def test_mapped_rows_reload_project_ids_and_work_item_status() -> None:
                     id=cluster_id,
                     name="postgres-type-round-trip",
                     endpoint="https://cluster.invalid",
-                    api_key="test-credential",
+                    credential_ref=uuid4(),
                     status=ClusterStatus.ACTIVE,
                     project_ids=project_ids,
                     created_by=uuid.uuid4(),
