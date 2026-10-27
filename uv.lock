@@ -622,7 +622,6 @@ dev = [
 
 [[package]]
 name = "execution-plane-client"
-version = "0.1.0"
 source = { editable = "src/execution_plane_client" }
 dependencies = [
     { name = "pydantic" },
