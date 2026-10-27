@@ -107,7 +107,7 @@ mypy_path = "src"
 source = ["src"]
 branch = true
 relative_files = true
-omit = ["src/execution_plane/node_protocol/node_pb2*.py"]
+omit = ["src/execution_plane/node_protocol/node_pb2*.py", "src/execution_plane_client/_version.py"]
 
 [tool.coverage.report]
 show_missing = true
