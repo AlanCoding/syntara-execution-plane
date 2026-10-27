@@ -1,15 +1,25 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "execution-plane-client"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Shared execution-plane command contracts and handler registry"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.15"
 dependencies = ["pydantic>=2.0.0"]
+
+# Version comes from the repository git tags (vX.Y.Z) via hatch-vcs, so the
+# published releases always match the tag they were cut from. Commits past a
+# tag build as X.Y.(Z+1).devN+g<sha>; PyPI publishes only from exact tags.
+[tool.hatch.version]
+source = "vcs"
+raw-options = { search_parent_directories = true }
+
+[tool.hatch.build.hooks.vcs]
+version-file = "_version.py"
 
 [tool.hatch.build.targets.wheel]
 include = ["/*.py", "/py.typed", "/commands/**"]
