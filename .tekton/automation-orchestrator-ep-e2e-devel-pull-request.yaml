@@ -34,24 +34,20 @@ spec:
       value: "{{revision}}"
     - name: pipeline-github-pr-number
       value: "{{pull_request_number}}"
-    - name: aap-dev-revision
-      value: AAP-90779-ep-from-source
     - name: ao-operator-revision
       value: AAP-90779-ep-from-source
     - name: ao-revision
       value: feat/ANSTRAT-1803
-    - name: ao-pr-number
-      value: ""
   taskRunTemplate:
     serviceAccountName: konflux-integration-runner
   pipelineSpec:
     description: |
       Prototype: reuse the ao-api-tests Kind cluster (provision + deploy-ao at
       ao-revision). Stage this Execution Plane revision and the matching
-      operator branch (AAP-90779-ep-from-source) so aap-dev builds both from
-      source, enable AO_EXECUTION_PLANE, then run tests/e2e against
-      myao-execution-plane-api. The prebuilt operator bundle ignores
-      ENABLE_EXECUTION_PLANE. Does not run AO API tests. AO must dispatch
+      operator branch (AAP-90779-ep-from-source, until the prebuilt bundle
+      honors ENABLE_EXECUTION_PLANE) so aap-dev builds both from source,
+      enable AO_EXECUTION_PLANE, then run tests/e2e against
+      myao-execution-plane-api. Does not run AO API tests. AO must dispatch
       script activities to EP and resolve cluster credential_ref
       (syntara feat/ANSTRAT-1803 until those land on devel).
 
@@ -77,10 +73,9 @@ spec:
       - name: aap-dev-revision
         type: string
         description: >
-          aap-dev branch for deploy-ao. Must include AO_EXECUTION_PLANE
-          (AAP-90779-ep-from-source / ansible/aap-dev#1111) until that
-          lands on main; otherwise the operator does not deploy EP.
-        default: AAP-90779-ep-from-source
+          aap-dev branch for deploy-ao. Main understands AO_EXECUTION_PLANE
+          since ansible/aap-dev#1111 merged.
+        default: main
       - name: ao-revision
         type: string
         description: >
@@ -93,7 +88,7 @@ spec:
           land on devel. Without dispatch, hello-world completes in Temporal with
           no EP work item. Without credential.resolve, the Kind target goes
           degraded and placement finds no match.
-        default: feat/ANSTRAT-1803
+        default: "devel"
       - name: ao-pr-number
         type: string
         description: >
@@ -526,8 +521,8 @@ spec:
             has uv but not git. The catalog deploy-ao task does not pass
             AO_EXECUTION_PLANE, so common.mk's override is forced to true
             here (ao.mk's later ?= cannot win: it includes common.mk first).
-            aap-dev-revision must be AAP-90779-ep-from-source until
-            ansible/aap-dev#1111 lands on main. deploy-ao skips cloning
+            aap-dev main has had AO_EXECUTION_PLANE since
+            ansible/aap-dev#1111 merged. deploy-ao skips cloning
             aap-dev when ~/aap-dev already exists, so these patches survive.
           params:
             - name: ssh-credentials-secret
@@ -615,7 +610,7 @@ spec:
                   AO_MK=\$HOME/aap-dev/makefiles/ao.mk
                   COMMON_MK=\$HOME/aap-dev/makefiles/common.mk
                   if ! grep -q '^AO_EXECUTION_PLANE' \"\${AO_MK}\"; then
-                    echo \"ERROR: \${AO_MK} has no AO_EXECUTION_PLANE; pin aap-dev-revision to AAP-90779-ep-from-source (ansible/aap-dev#1111)\" >&2
+                    echo \"ERROR: \${AO_MK} has no AO_EXECUTION_PLANE; aap-dev main has had it since ansible/aap-dev#1111\" >&2
                     grep -n . \"\${AO_MK}\" >&2 || true
                     exit 1
                   fi
