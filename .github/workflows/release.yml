@@ -21,11 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # Full history so hatch-vcs can read the tag; a shallow checkout
-          # of an annotated tag works, but depth 0 removes all doubt.
+          # Full history + tags so hatch-vcs derives the version from the
+          # repository tags. fetch-depth: 0 alone does not fetch tags on a
+          # branch ref (only on a tag checkout), which makes manual dispatch
+          # builds derive 0.0.1.devN instead of X.Y.(Z+1).devN.
           fetch-depth: 0
+          fetch-tags: true
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
@@ -34,24 +36,15 @@ jobs:
           enable-cache: true
 
       - name: Build the client distribution
-        run: uv build ./src/execution_plane_client/
-
-      - name: Verify the built version matches the tag
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          expected="${TAG#v}"
-          ls dist/
-          if ! ls "dist/execution_plane_client-${expected}"* >/dev/null 2>&1; then
-            echo "ERROR: no dist artifact for version ${expected} (tag ${TAG})." >&2
-            echo "hatch-vcs probably fell back (missing git metadata?) or the tag" >&2
-            echo "does not match the derived version. Refusing to publish." >&2
-            exit 1
-          fi
+        # --out-dir dist so the publish action (and the guard below) find the
+        # artifacts at the repository root; uv build's default output is
+        # <package>/dist/.
+        run: uv build --out-dir dist ./src/execution_plane_client/
 
       - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@ed0c5f2b7211eb9e215ace18b7f9aa2f5e268aee # release/v1
+        # Tag pushes only: a manual dispatch on a branch derives a dev version
+        # (X.Y.(Z+1).devN+g<sha>) and must never reach the registry.
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   publish-image:
     runs-on: ubuntu-latest
