@@ -11,7 +11,7 @@ license = "Apache-2.0"
 requires-python = ">=3.12,<3.15"
 authors = [{ name = "Syntara contributors" }]
 dependencies = [
-    "execution-plane-client==0.1.0",
+    "execution-plane-client",
     "alembic>=1.14.0",
     "asyncpg>=0.30.0",
     "cryptography>=48.0.1",
