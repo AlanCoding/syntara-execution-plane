@@ -14,9 +14,14 @@ dependencies = ["pydantic>=2.0.0"]
 # Version comes from the repository git tags (vX.Y.Z) via hatch-vcs, so the
 # published releases always match the tag they were cut from. Commits past a
 # tag build as X.Y.(Z+1).devN+g<sha>; PyPI publishes only from exact tags.
+# fallback_version covers source trees without git metadata: the Konflux
+# image builds stage the checkout without .git (tar --exclude='.git'), and
+# the EP image's uv sync builds this package in-container from that tree.
+# 0.0.0 is only ever a build-internal placeholder — nothing consumes it
+# (the EP workspace carries no version constraint on this member).
 [tool.hatch.version]
 source = "vcs"
-raw-options = { search_parent_directories = true }
+raw-options = { search_parent_directories = true, fallback_version = "0.0.0" }
 
 [tool.hatch.build.hooks.vcs]
 version-file = "_version.py"
