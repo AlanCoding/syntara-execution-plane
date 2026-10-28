@@ -51,7 +51,7 @@ jobs:
           fi
 
       - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@ed0c5f2b7211eb9e215ace18b7f9aa2f5e268aee # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   publish-image:
     runs-on: ubuntu-latest
