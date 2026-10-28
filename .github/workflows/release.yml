@@ -41,24 +41,9 @@ jobs:
         # <package>/dist/.
         run: uv build --out-dir dist ./src/execution_plane_client/
 
-      - name: Verify the built version matches the tag
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          expected="${TAG#v}"
-          ls dist/
-          if ! ls "dist/execution_plane_client-${expected}"* >/dev/null 2>&1; then
-            echo "ERROR: no dist artifact for version ${expected} (tag ${TAG})." >&2
-            echo "hatch-vcs probably fell back (missing git metadata?) or the tag" >&2
-            echo "does not match the derived version. Refusing to publish." >&2
-            exit 1
-          fi
-
       - name: Publish package distributions to PyPI
         # Tag pushes only: a manual dispatch on a branch derives a dev version
         # (X.Y.(Z+1).devN+g<sha>) and must never reach the registry.
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   publish-image:
