@@ -37,7 +37,7 @@ spec:
     - name: ao-operator-revision
       value: AAP-90779-ep-from-source
     - name: ao-revision
-      value: e1594758a18881a1561d543e70a3504538345b00
+      value: b5294efc38dd42f497fcfbf97a222f9304a94cbf
     - name: ao-pr-number
       value: 1035 
   taskRunTemplate:
