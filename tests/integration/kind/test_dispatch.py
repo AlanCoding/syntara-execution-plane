@@ -47,6 +47,10 @@ _WORKLOAD_WAIT_SECONDS = 5
 _CANCEL_WORKLOAD_WAIT_SECONDS = 15
 _JOB_WAIT_TIMEOUT_SECONDS = 30
 _DISPATCH_CLEANUP_TIMEOUT_SECONDS = 30
+# A short execution budget with a much longer script so the step reliably
+# outruns its timeout without any cancellation request.
+_TIMEOUT_WORKLOAD_BUDGET_SECONDS = 5
+_TIMEOUT_WORKLOAD_SLEEP_SECONDS = 60
 
 
 async def _read_job(batch_api: BatchV1Api, job_name: str, namespace: str) -> V1Job | None:
@@ -458,6 +462,82 @@ async def test_work_item_cancel_reaches_cancelled(
     assert final_item.result is not None
     assert final_item.result["cancelled"] is True
     assert final_item.result["execution_started"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_work_item_timeout_has_no_distinct_status(
+    ep_cluster: Cluster,
+    kubernetes_batch_api: BatchV1Api,
+    integration_credential_resolver: CredentialResolver,
+) -> None:
+    """Document how a workload that exceeds its timeout is recorded today.
+
+    EP has no dedicated timed-out status. A step that outruns its
+    ``timeout_seconds`` budget currently resolves to a generic failure or
+    reconciliation outcome, not a distinct timeout. This test pins that behavior
+    so a follow-up that introduces a ``TIMED_OUT`` status has a baseline to
+    change, and so the actual terminal status/result is visible in CI to inform
+    that discussion.
+    """
+    database_url = os.environ["EP_TEST_DATABASE_URL"]
+    settings = get_ep_settings()
+    client_id = "ep-it-timeout"
+
+    async with (
+        ClusterStore.from_database_url(database_url) as cluster_store,
+        ExecutionTargetStore.from_database_url(database_url) as target_store,
+    ):
+        target = await _first_target(target_store, ep_cluster.id)
+        assert isinstance(target.placement, KubernetesPlacement)
+        namespace = target.placement.namespace
+
+        async with _work_service(
+            database_url,
+            cluster_store,
+            target_store,
+            settings,
+            integration_credential_resolver,
+        ) as work:
+            dispatched = await _dispatch_item(
+                work,
+                work.worker_managers,
+                client_id=client_id,
+                payload=build_payload(
+                    language="bash",
+                    code=f"sleep {_TIMEOUT_WORKLOAD_SLEEP_SECONDS}",
+                    timeout_seconds=_TIMEOUT_WORKLOAD_BUDGET_SECONDS,
+                    environment={},
+                    image=_NODE_IMAGE,
+                ),
+            )
+            item = dispatched.item
+            assigned = dispatched.assigned
+            job_name = dispatched.job_name
+            core_api = CoreV1Api(kubernetes_batch_api.api_client)
+
+            await _process_item(assigned, work.store, target_store, work.worker_managers, settings)
+
+            await _assert_job_cleaned_up(
+                kubernetes_batch_api,
+                core_api,
+                job_name,
+                namespace,
+            )
+            final_item = await work.store.get(item.id, client_id=client_id)
+
+    assert final_item is not None
+    # No dedicated timeout status exists yet: a timed-out workload lands in a
+    # generic terminal failure (node-reported) or reconciliation-required (the
+    # EP transport deadline fired). Asserting the set keeps this robust to which
+    # signal wins while documenting that the outcome is not timeout-specific.
+    assert final_item.status in {
+        WorkItemStatus.FAILED,
+        WorkItemStatus.RECONCILIATION_REQUIRED,
+    }, (
+        f"Expected a generic failure/reconciliation status (no distinct timeout "
+        f"status exists); got {final_item.status}; result={final_item.result}"
+    )
 
 
 _PARALLEL_SLEEP_SECONDS = 4
