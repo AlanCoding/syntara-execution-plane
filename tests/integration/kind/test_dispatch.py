@@ -537,11 +537,9 @@ async def test_work_item_timeout_reaches_terminal_status(
     )
 
     assert final_item is not None
-    assert final_item.status in {
-        WorkItemStatus.CANCELLED,
-        WorkItemStatus.FAILED,
-        WorkItemStatus.RECONCILIATION_REQUIRED,
-    }, f"got {final_item.status}; result={final_item.result}"
+    assert final_item.status is WorkItemStatus.FAILED, (
+        f"Expected FAILED but got {final_item.status}; result={final_item.result}"
+    )
 
 
 _PARALLEL_SLEEP_SECONDS = 4
