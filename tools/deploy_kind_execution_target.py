@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Create a local kind cluster and register it as an Execution Plane target.
 
-AO registers compute using a cluster command; the EP worker reconciles its binding into a
-Cluster plus a default vanilla-Kubernetes ExecutionTarget.
+AO registers compute using a cluster command; the EP command handler provisions a
+Cluster plus a default vanilla-Kubernetes ExecutionTarget synchronously.
 
 This script:
 
@@ -10,7 +10,7 @@ This script:
 2. Applies deploy/kubernetes/execution-target/rbac.yaml (syntara-dispatcher).
 3. Attaches the running EP worker container to the kind network so the
    in-cluster API IP is reachable from podman-compose.
-4. Upserts the cluster binding against the local EP API.
+4. Provisions the cluster against the local EP API.
 
 Usage:
     make setup && uvx podman-compose up --build -d
@@ -245,6 +245,11 @@ def _ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context(cafile=str(ca_path))
 
 
+def _ssl_context_for(url: str) -> ssl.SSLContext | None:
+    """Return an SSL context for HTTPS URLs and None for plain HTTP."""
+    return _ssl_context() if url.startswith("https://") else None
+
+
 def ep_request(method: str, url: str, token: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
     """Call the local EP API and return (status, JSON-or-text)."""
     data = None if body is None else json.dumps(body).encode("utf-8")
@@ -259,7 +264,7 @@ def ep_request(method: str, url: str, token: str, body: dict[str, Any] | None = 
         },
     )
     try:
-        with urlopen(request, context=_ssl_context(), timeout=15) as response:  # noqa: S310
+        with urlopen(request, context=_ssl_context_for(url), timeout=15) as response:  # noqa: S310
             payload = response.read().decode("utf-8")
             parsed: Any = json.loads(payload) if payload else None
             return response.status, parsed
@@ -272,14 +277,14 @@ def ep_request(method: str, url: str, token: str, body: dict[str, Any] | None = 
         return exc.code, parsed
 
 
-def wait_for_ep_api(api_url: str) -> None:
+def wait_for_ep_api(api_url: str, timeout: int = 30) -> None:
     """Block until the local API answers readiness."""
     url = f"{api_url.rstrip('/')}/healthz/ready"
-    deadline = time.time() + 30
+    deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             request = Request(url, method="GET")  # noqa: S310
-            with urlopen(request, context=_ssl_context(), timeout=5) as response:  # noqa: S310
+            with urlopen(request, context=_ssl_context_for(url), timeout=5) as response:  # noqa: S310
                 if response.status == HTTPStatus.OK:
                     return
         except (HTTPError, URLError, TimeoutError, ssl.SSLError):
@@ -288,18 +293,7 @@ def wait_for_ep_api(api_url: str) -> None:
     raise TimeoutError(msg)
 
 
-def next_revision(api_url: str, token: str, source_integration_id: uuid.UUID) -> int:
-    """Return the next cluster-binding revision for this local kind identity."""
-    status, body = ep_request("GET", f"{api_url}/v1/clusters/{source_integration_id}", token)
-    if status == HTTPStatus.NOT_FOUND:
-        return 1
-    if status >= HTTPStatus.BAD_REQUEST:
-        msg = f"Could not read cluster binding: {body}"
-        raise RuntimeError(msg)
-    return int(body["desired_revision"]) + 1
-
-
-def upsert_binding(
+def provision_cluster(
     api_url: str,
     token: str,
     source_integration_id: uuid.UUID,
@@ -310,8 +304,13 @@ def upsert_binding(
     credential_ref: uuid.UUID,
     ca_certificate: str,
 ) -> dict[str, Any]:
-    """Submit versioned desired state for the kind cluster."""
-    revision = next_revision(api_url, token, source_integration_id)
+    """Provision the kind cluster synchronously through the EP command API.
+
+    Provisioning is synchronous and idempotent at the same revision. Re-runs
+    against an existing cluster return idempotently at revision 1; recreate the
+    cluster (``--recreate``) or a fresh database to apply changed configuration.
+    """
+    revision = 1
     body = {
         "resource_key": str(source_integration_id),
         "desired_revision": revision,
@@ -324,7 +323,7 @@ def upsert_binding(
         "is_default": True,
         "labels": {"execution-plane.syntara.io/local": "kind"},
     }
-    print(f"[INFO] Upserting cluster binding {source_integration_id} revision {revision}")
+    print(f"[INFO] Provisioning cluster {source_integration_id} revision {revision}")
     command_id = uuid.uuid4()
     client_id = os.environ.get("EP_AO_CLIENT_ID", "syntara-orchestration")
     envelope = MessageEnvelope(
@@ -343,7 +342,7 @@ def upsert_binding(
     )
     status, payload = ep_request("POST", f"{api_url}/v1/commands", token, envelope.model_dump(mode="json"))
     if status >= HTTPStatus.BAD_REQUEST:
-        msg = f"Cluster binding upsert failed ({status}): {payload}"
+        msg = f"Cluster provision failed ({status}): {payload}"
         raise RuntimeError(msg)
     if not isinstance(payload, dict):
         msg = f"Unexpected cluster command response: {payload}"
@@ -351,25 +350,25 @@ def upsert_binding(
     return payload
 
 
-def wait_for_binding(api_url: str, token: str, source_integration_id: uuid.UUID, timeout: int) -> dict[str, Any]:
-    """Poll until the worker has reconciled the binding to ready."""
+def wait_for_cluster(api_url: str, token: str, source_integration_id: uuid.UUID, timeout: int) -> dict[str, Any]:
+    """Poll until the synchronously-provisioned cluster reports active."""
     deadline = time.time() + timeout
-    url = f"{api_url}/v1/clusters/{source_integration_id}"
+    url = f"{api_url}/v1/clusters?source_integration_id={source_integration_id}"
     while time.time() < deadline:
         status, payload = ep_request("GET", url, token)
         if status == HTTPStatus.OK:
-            if not isinstance(payload, dict):
-                msg = f"Unexpected cluster response: {payload}"
-                raise TypeError(msg)
-            binding_status = payload.get("status")
-            print(f"[INFO] Cluster binding status: {binding_status}")
-            if binding_status == "ready":
-                return payload
-            if binding_status == "error":
-                msg = payload.get("status_message") or "Cluster binding reconciliation failed"
-                raise RuntimeError(msg)
+            resources = payload.get("resources") if isinstance(payload, dict) else None
+            if resources:
+                cluster = resources[0]
+                cluster_status = cluster.get("status")
+                print(f"[INFO] Cluster status: {cluster_status}")
+                if cluster_status == "active":
+                    return cluster
+                if cluster_status == "error":
+                    msg = cluster.get("status_message") or "Cluster provisioning failed"
+                    raise RuntimeError(msg)
         time.sleep(3)
-    msg = f"Timed out waiting for cluster binding {source_integration_id} to become ready"
+    msg = f"Timed out waiting for cluster {source_integration_id} to become active"
     raise TimeoutError(msg)
 
 
@@ -387,11 +386,11 @@ def list_execution_targets(api_url: str, token: str) -> list[dict[str, Any]]:
 
 
 def source_integration_id(cluster_name: str) -> uuid.UUID:
-    """Stable identity so re-runs update the same binding instead of creating another."""
+    """Stable identity so re-runs address the same cluster instead of creating another."""
     return uuid.uuid5(uuid.NAMESPACE_URL, f"https://execution-plane.local/kind/{cluster_name}")
 
 
-def register_kind_binding(
+def register_kind_cluster(
     *,
     api_url: str,
     cluster_name: str,
@@ -401,12 +400,17 @@ def register_kind_binding(
     credential_ref: uuid.UUID,
     ca_certificate: str,
     wait_seconds: int,
+    wait_for_api: int = 0,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Upsert the cluster binding and wait until EP reports a ready target."""
-    wait_for_ep_api(api_url)
+    """Provision the kind cluster synchronously through the EP command API.
+
+    When *wait_for_api* is non-zero the EP API is polled for readiness first.
+    """
+    if wait_for_api > 0:
+        wait_for_ep_api(api_url, timeout=wait_for_api)
     token = ep_service_token()
     integration_id = source_integration_id(cluster_name)
-    upsert_binding(
+    provision_cluster(
         api_url,
         token,
         integration_id,
@@ -416,8 +420,8 @@ def register_kind_binding(
         credential_ref=credential_ref,
         ca_certificate=ca_certificate,
     )
-    binding = wait_for_binding(api_url, token, integration_id, wait_seconds)
-    return binding, list_execution_targets(api_url, token)
+    cluster = wait_for_cluster(api_url, token, integration_id, wait_seconds)
+    return cluster, list_execution_targets(api_url, token)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -446,6 +450,13 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--ao-admin-password-file", type=Path)
     parser.add_argument("--ao-insecure", action="store_true")
     parser.add_argument("--wait-seconds", type=int, default=DEFAULT_WAIT_SECONDS)
+    parser.add_argument(
+        "--wait-for-api",
+        type=int,
+        default=0,
+        metavar="SECONDS",
+        help="Poll the EP API for readiness before registering (useful when the API was just started)",
+    )
     parser.add_argument("--recreate", action="store_true", help="Delete and recreate the kind cluster")
     parser.add_argument("--host-worker", action="store_true", help="Use the host endpoint for AO's make dev")
     return parser.parse_args()
@@ -464,7 +475,7 @@ def _ao_admin_password(args: argparse.Namespace) -> str:
 
 
 def main() -> int:
-    """Create kind, register the cluster binding, and wait until the target is ready."""
+    """Create kind, provision the cluster, and wait until it is active."""
     args = _parse_args()
     if args.credential_ref is None and not args.create_ao_credential:
         msg = "--credential-ref, EP_KIND_CREDENTIAL_REF, or --create-ao-credential is required"
@@ -498,7 +509,7 @@ def main() -> int:
         else:
             connect_worker_to_kind_network()
         print(f"[INFO] Kind API endpoint for the EP worker: {endpoint}")
-        binding, targets = register_kind_binding(
+        cluster, targets = register_kind_cluster(
             api_url=args.api_url,
             cluster_name=args.cluster_name,
             binding_name=args.binding_name,
@@ -507,6 +518,7 @@ def main() -> int:
             credential_ref=args.credential_ref,
             ca_certificate=ca_certificate,
             wait_seconds=args.wait_seconds,
+            wait_for_api=args.wait_for_api,
         )
     except (FileNotFoundError, RuntimeError, TimeoutError, TypeError, subprocess.CalledProcessError) as exc:
         if isinstance(exc, subprocess.CalledProcessError):
@@ -520,8 +532,7 @@ def main() -> int:
             kubeconfig.unlink(missing_ok=True)
 
     print()
-    print(f"[INFO] Cluster binding {binding['id']} is {binding['status']}")
-    print(f"[INFO] Cluster id: {binding.get('cluster_id')}")
+    print(f"[INFO] Cluster {cluster['id']} is {cluster['status']}")
     print("[INFO] Execution targets:")
     print(json.dumps(targets, indent=2, default=str))
     return 0
