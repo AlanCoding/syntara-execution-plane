@@ -1,4 +1,4 @@
-.PHONY: install test test-coverage coverage-combine test-integration lint format typecheck openapi migrate image secrets certs setup compose-up compose-down generate-token kind-target submit-work sync-requirements sync-rpms-lock-yaml
+.PHONY: install test test-coverage coverage-combine test-integration lint format typecheck openapi generate-list-params migrate image secrets certs setup compose-up compose-down generate-token kind-target submit-work sync-requirements sync-rpms-lock-yaml
 
 TEST_ARGS ?= --ignore=tests/integration
 COVERAGE_FILES ?= coverage-artifacts/*/.coverage
@@ -35,6 +35,9 @@ typecheck:
 
 openapi:
 	uv run python -m tools.export_openapi
+
+generate-list-params:
+	uv run python tools/generate_list_params.py
 
 # Fully pinned, hashed lockfiles for Cachi2/Hermeto pip prefetch.
 # Konflux does not read uv.lock; keep these in sync after dependency changes.
