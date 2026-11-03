@@ -56,9 +56,12 @@ def generate_filter_fields(model_class, model_name: str, short_name: str | None 
 
     for field_name in filterable:
         description = field_descriptions.get(field_name, f"{field_name} filter")
-        field_defs.append(
-            f'    {field_name}: str | None = Field(default=None, description="{description}")'
-        )
+        # Format field definition, breaking long lines
+        field_def = f'    {field_name}: str | None = Field(default=None, description="{description}")'
+        if len(field_def) > 120:
+            # Break across lines for ruff E501
+            field_def = f'    {field_name}: str | None = Field(\n        default=None, description="{description}"\n    )'
+        field_defs.append(field_def)
 
     return field_defs
 

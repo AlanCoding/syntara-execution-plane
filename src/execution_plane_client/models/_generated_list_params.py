@@ -15,7 +15,9 @@ class ClusterListParamsBase(EPListParams):
     """Generated base for Cluster list params with filter fields and sort options."""
 
     id: str | None = Field(default=None, description="Cluster UUID; id[in]=uuid1,uuid2 for membership")
-    created_at: str | None = Field(default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull")
+    created_at: str | None = Field(
+        default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull"
+    )
     updated_at: str | None = Field(default=None, description="Update time; supports ranges and isnull")
     name: str | None = Field(default=None, description="Name; supports eq, in, contains, and starts_with")
     endpoint: str | None = Field(default=None, description="Endpoint; supports eq, in, contains, and starts_with")
@@ -47,7 +49,9 @@ class ExecutionTargetListParamsBase(EPListParams):
     """Generated base for ExecutionTarget list params with filter fields and sort options."""
 
     id: str | None = Field(default=None, description="Target UUID; id[in]=uuid1,uuid2 for membership")
-    created_at: str | None = Field(default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull")
+    created_at: str | None = Field(
+        default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull"
+    )
     name: str | None = Field(default=None, description="Name; supports eq, in, contains, and starts_with")
     endpoint: str | None = Field(default=None, description="Endpoint; supports eq, in, contains, and starts_with")
     status: str | None = Field(default=None, description="Target status; supports eq and in")

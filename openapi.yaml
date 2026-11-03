@@ -283,6 +283,8 @@ paths:
           - -id
           - created_at
           - -created_at
+          - updated_at
+          - -updated_at
           - name
           - -name
           - endpoint
@@ -293,8 +295,6 @@ paths:
           - -enabled
           - is_default
           - -is_default
-          - updated_at
-          - -updated_at
           type: string
           description: Cluster sort field; oldest first by default.
           default: created_at
@@ -579,16 +579,16 @@ paths:
           description: Target UUID; id[in]=uuid1,uuid2 for membership
           title: Id
         description: Target UUID; id[in]=uuid1,uuid2 for membership
-      - name: cluster_id
+      - name: created_at
         in: query
         required: false
         schema:
           anyOf:
           - type: string
           - type: 'null'
-          description: Physical cluster UUID; supports eq and in
-          title: Cluster Id
-        description: Physical cluster UUID; supports eq and in
+          description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+          title: Created At
+        description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
       - name: name
         in: query
         required: false
@@ -629,6 +629,16 @@ paths:
           description: Backend type; supports eq and in
           title: Backend Type
         description: Backend type; supports eq and in
+      - name: cluster_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Physical cluster UUID; supports eq and in
+          title: Cluster Id
+        description: Physical cluster UUID; supports eq and in
       - name: enabled
         in: query
         required: false
@@ -649,16 +659,6 @@ paths:
           description: Boolean; supports eq, in, and isnull
           title: Is Default
         description: Boolean; supports eq, in, and isnull
-      - name: created_at
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
-          title: Created At
-        description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
       - name: last_ran_at
         in: query
         required: false
