@@ -16,15 +16,26 @@ class ClusterListParamsBase(EPListParams):
 
     id: str | None = Field(default=None, description="Cluster UUID; id[in]=uuid1,uuid2 for membership")
     created_at: str | None = Field(
-        default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull"
+        default=None, description="Creation timestamp; supports eq, in, gt, gte, lt, lte, and isnull"
     )
-    updated_at: str | None = Field(default=None, description="Update time; supports ranges and isnull")
-    name: str | None = Field(default=None, description="Name; supports eq, in, contains, and starts_with")
-    endpoint: str | None = Field(default=None, description="Endpoint; supports eq, in, contains, and starts_with")
-    status: str | None = Field(default=None, description="Cluster status; supports eq and in")
-    status_message: str | None = Field(default=None, description="Status message; supports text operators and isnull")
-    enabled: str | None = Field(default=None, description="Boolean; supports eq, in, and isnull")
-    is_default: str | None = Field(default=None, description="Boolean; supports eq, in, and isnull")
+    updated_at: str | None = Field(
+        default=None, description="Last update timestamp; supports eq, in, gt, gte, lt, lte, and isnull"
+    )
+    name: str | None = Field(default=None, description="Cluster name; supports eq, in, contains, and starts_with")
+    endpoint: str | None = Field(
+        default=None, description="Cluster API endpoint URL; supports eq, in, contains, and starts_with"
+    )
+    status: str | None = Field(default=None, description="Cluster lifecycle status; supports eq and in")
+    status_message: str | None = Field(
+        default=None,
+        description="Human-readable status message or error details; supports eq, in, contains, and starts_with",
+    )
+    enabled: str | None = Field(
+        default=None, description="Whether the cluster is enabled for use; supports eq, in, and isnull"
+    )
+    is_default: str | None = Field(
+        default=None, description="Whether this is the default cluster for the client; supports eq, in, and isnull"
+    )
     sort: Literal[
         "id",
         "-id",
@@ -48,19 +59,32 @@ class ClusterListParamsBase(EPListParams):
 class ExecutionTargetListParamsBase(EPListParams):
     """Generated base for ExecutionTarget list params with filter fields and sort options."""
 
-    id: str | None = Field(default=None, description="Target UUID; id[in]=uuid1,uuid2 for membership")
+    id: str | None = Field(default=None, description="Execution target UUID; id[in]=uuid1,uuid2 for membership")
     created_at: str | None = Field(
-        default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull"
+        default=None, description="Creation timestamp; supports eq, in, gt, gte, lt, lte, and isnull"
     )
-    name: str | None = Field(default=None, description="Name; supports eq, in, contains, and starts_with")
-    endpoint: str | None = Field(default=None, description="Endpoint; supports eq, in, contains, and starts_with")
-    status: str | None = Field(default=None, description="Target status; supports eq and in")
-    backend_type: str | None = Field(default=None, description="Backend type; supports eq and in")
-    cluster_id: str | None = Field(default=None, description="Physical cluster UUID; supports eq and in")
-    enabled: str | None = Field(default=None, description="Boolean; supports eq, in, and isnull")
-    is_default: str | None = Field(default=None, description="Boolean; supports eq, in, and isnull")
-    last_ran_at: str | None = Field(default=None, description="Last run time; supports ranges and isnull")
-    status_message: str | None = Field(default=None, description="Status message; supports text operators and isnull")
+    name: str | None = Field(
+        default=None, description="Execution target name; supports eq, in, contains, and starts_with"
+    )
+    endpoint: str | None = Field(
+        default=None, description="Execution target API endpoint URL; supports eq, in, contains, and starts_with"
+    )
+    status: str | None = Field(default=None, description="Execution target lifecycle status; supports eq and in")
+    backend_type: str | None = Field(default=None, description="Backend execution platform type; supports eq and in")
+    cluster_id: str | None = Field(default=None, description="Parent cluster UUID; supports eq and in")
+    enabled: str | None = Field(
+        default=None, description="Whether the target is enabled for use; supports eq, in, and isnull"
+    )
+    is_default: str | None = Field(
+        default=None, description="Whether this is the default target for the cluster; supports eq, in, and isnull"
+    )
+    last_ran_at: str | None = Field(
+        default=None, description="Last execution timestamp; supports eq, in, gt, gte, lt, lte, and isnull"
+    )
+    status_message: str | None = Field(
+        default=None,
+        description="Human-readable status message or error details; supports eq, in, contains, and starts_with",
+    )
     sort: Literal[
         "id",
         "-id",

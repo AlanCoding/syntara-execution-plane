@@ -324,9 +324,10 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+          description: Creation timestamp; supports eq, in, gt, gte, lt, lte, and
+            isnull
           title: Created At
-        description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+        description: Creation timestamp; supports eq, in, gt, gte, lt, lte, and isnull
       - name: updated_at
         in: query
         required: false
@@ -334,9 +335,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Update time; supports ranges and isnull
+          description: Last update timestamp; supports eq, in, gt, gte, lt, lte, and
+            isnull
           title: Updated At
-        description: Update time; supports ranges and isnull
+        description: Last update timestamp; supports eq, in, gt, gte, lt, lte, and
+          isnull
       - name: name
         in: query
         required: false
@@ -344,9 +347,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Name; supports eq, in, contains, and starts_with
+          description: Cluster name; supports eq, in, contains, and starts_with
           title: Name
-        description: Name; supports eq, in, contains, and starts_with
+        description: Cluster name; supports eq, in, contains, and starts_with
       - name: endpoint
         in: query
         required: false
@@ -354,9 +357,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Endpoint; supports eq, in, contains, and starts_with
+          description: Cluster API endpoint URL; supports eq, in, contains, and starts_with
           title: Endpoint
-        description: Endpoint; supports eq, in, contains, and starts_with
+        description: Cluster API endpoint URL; supports eq, in, contains, and starts_with
       - name: status
         in: query
         required: false
@@ -364,9 +367,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cluster status; supports eq and in
+          description: Cluster lifecycle status; supports eq and in
           title: Status
-        description: Cluster status; supports eq and in
+        description: Cluster lifecycle status; supports eq and in
       - name: status_message
         in: query
         required: false
@@ -374,9 +377,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Status message; supports text operators and isnull
+          description: Human-readable status message or error details; supports eq,
+            in, contains, and starts_with
           title: Status Message
-        description: Status message; supports text operators and isnull
+        description: Human-readable status message or error details; supports eq,
+          in, contains, and starts_with
       - name: enabled
         in: query
         required: false
@@ -384,9 +389,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Boolean; supports eq, in, and isnull
+          description: Whether the cluster is enabled for use; supports eq, in, and
+            isnull
           title: Enabled
-        description: Boolean; supports eq, in, and isnull
+        description: Whether the cluster is enabled for use; supports eq, in, and
+          isnull
       - name: is_default
         in: query
         required: false
@@ -394,9 +401,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Boolean; supports eq, in, and isnull
+          description: Whether this is the default cluster for the client; supports
+            eq, in, and isnull
           title: Is Default
-        description: Boolean; supports eq, in, and isnull
+        description: Whether this is the default cluster for the client; supports
+          eq, in, and isnull
       - name: id[operator]
         in: query
         required: false
@@ -576,9 +585,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Target UUID; id[in]=uuid1,uuid2 for membership
+          description: Execution target UUID; id[in]=uuid1,uuid2 for membership
           title: Id
-        description: Target UUID; id[in]=uuid1,uuid2 for membership
+        description: Execution target UUID; id[in]=uuid1,uuid2 for membership
       - name: created_at
         in: query
         required: false
@@ -586,9 +595,10 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+          description: Creation timestamp; supports eq, in, gt, gte, lt, lte, and
+            isnull
           title: Created At
-        description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+        description: Creation timestamp; supports eq, in, gt, gte, lt, lte, and isnull
       - name: name
         in: query
         required: false
@@ -596,9 +606,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Name; supports eq, in, contains, and starts_with
+          description: Execution target name; supports eq, in, contains, and starts_with
           title: Name
-        description: Name; supports eq, in, contains, and starts_with
+        description: Execution target name; supports eq, in, contains, and starts_with
       - name: endpoint
         in: query
         required: false
@@ -606,9 +616,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Endpoint; supports eq, in, contains, and starts_with
+          description: Execution target API endpoint URL; supports eq, in, contains,
+            and starts_with
           title: Endpoint
-        description: Endpoint; supports eq, in, contains, and starts_with
+        description: Execution target API endpoint URL; supports eq, in, contains,
+          and starts_with
       - name: status
         in: query
         required: false
@@ -616,9 +628,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Target status; supports eq and in
+          description: Execution target lifecycle status; supports eq and in
           title: Status
-        description: Target status; supports eq and in
+        description: Execution target lifecycle status; supports eq and in
       - name: backend_type
         in: query
         required: false
@@ -626,9 +638,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Backend type; supports eq and in
+          description: Backend execution platform type; supports eq and in
           title: Backend Type
-        description: Backend type; supports eq and in
+        description: Backend execution platform type; supports eq and in
       - name: cluster_id
         in: query
         required: false
@@ -636,9 +648,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Physical cluster UUID; supports eq and in
+          description: Parent cluster UUID; supports eq and in
           title: Cluster Id
-        description: Physical cluster UUID; supports eq and in
+        description: Parent cluster UUID; supports eq and in
       - name: enabled
         in: query
         required: false
@@ -646,9 +658,10 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Boolean; supports eq, in, and isnull
+          description: Whether the target is enabled for use; supports eq, in, and
+            isnull
           title: Enabled
-        description: Boolean; supports eq, in, and isnull
+        description: Whether the target is enabled for use; supports eq, in, and isnull
       - name: is_default
         in: query
         required: false
@@ -656,9 +669,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Boolean; supports eq, in, and isnull
+          description: Whether this is the default target for the cluster; supports
+            eq, in, and isnull
           title: Is Default
-        description: Boolean; supports eq, in, and isnull
+        description: Whether this is the default target for the cluster; supports
+          eq, in, and isnull
       - name: last_ran_at
         in: query
         required: false
@@ -666,9 +681,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Last run time; supports ranges and isnull
+          description: Last execution timestamp; supports eq, in, gt, gte, lt, lte,
+            and isnull
           title: Last Ran At
-        description: Last run time; supports ranges and isnull
+        description: Last execution timestamp; supports eq, in, gt, gte, lt, lte,
+          and isnull
       - name: status_message
         in: query
         required: false
@@ -676,9 +693,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Status message; supports text operators and isnull
+          description: Human-readable status message or error details; supports eq,
+            in, contains, and starts_with
           title: Status Message
-        description: Status message; supports text operators and isnull
+        description: Human-readable status message or error details; supports eq,
+          in, contains, and starts_with
       - name: id[operator]
         in: query
         required: false

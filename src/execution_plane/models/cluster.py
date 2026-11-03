@@ -65,9 +65,9 @@ class Cluster(SQLModel, table=True):
     )
 
     # Caller-supplied physical id, shared with the owning AO Integration (same UUID).
-    id: uuid.UUID = Field(primary_key=True)
-    name: str = Field(sa_column=Column(String, nullable=False))
-    endpoint: str = Field(sa_column=Column(String, nullable=False))
+    id: uuid.UUID = Field(primary_key=True, description="Cluster UUID")
+    name: str = Field(sa_column=Column(String, nullable=False), description="Cluster name")
+    endpoint: str = Field(sa_column=Column(String, nullable=False), description="Cluster API endpoint URL")
     status: ClusterStatus = Field(
         default=ClusterStatus.REGISTERING,
         sa_column=Column(
@@ -76,10 +76,15 @@ class Cluster(SQLModel, table=True):
             ),
             nullable=False,
         ),
+        description="Cluster lifecycle status",
     )
-    enabled: bool = Field(default=True, nullable=False)
-    is_default: bool = Field(default=False, nullable=False)
-    status_message: str | None = Field(default=None, nullable=True)
+    enabled: bool = Field(default=True, nullable=False, description="Whether the cluster is enabled for use")
+    is_default: bool = Field(
+        default=False, nullable=False, description="Whether this is the default cluster for the client"
+    )
+    status_message: str | None = Field(
+        default=None, nullable=True, description="Human-readable status message or error details"
+    )
     credential_ref: uuid.UUID = Field(sa_column=Column(Uuid(), nullable=False))
     ca_certificate: str | None = Field(
         default=None,
@@ -102,8 +107,12 @@ class Cluster(SQLModel, table=True):
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
     created_by: uuid.UUID = Field(nullable=False)
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False), description="Creation timestamp"
+    )
     updated_by: uuid.UUID = Field(nullable=False)
-    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False), description="Last update timestamp"
+    )
 
     execution_targets: list["ExecutionTarget"] = Relationship(back_populates="cluster")
