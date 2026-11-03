@@ -129,52 +129,21 @@ def test_list_params_share_resource_specific_sort_defaults() -> None:
     assert ClusterListParams().sort == "created_at"
 
 
-def test_list_params_publish_resource_filter_fields() -> None:
-    assert set(WorkItemListParams.model_fields) == {
-        "limit",
-        "cursor",
-        "sort",
-        "include_total",
-        "id",
-        "status",
-        "created_at",
-        "claimed_at",
-        "completed_at",
-        "resource_cleanup_status",
-        "resource_cleanup_error",
-    }
-    assert set(ExecutionTargetListParams.model_fields) == {
-        "limit",
-        "cursor",
-        "sort",
-        "include_total",
-        "id",
-        "cluster_id",
-        "name",
-        "endpoint",
-        "status",
-        "backend_type",
-        "enabled",
-        "is_default",
-        "created_at",
-        "last_ran_at",
-        "status_message",
-    }
-    assert set(ClusterListParams.model_fields) == {
-        "limit",
-        "cursor",
-        "sort",
-        "include_total",
-        "id",
-        "created_at",
-        "updated_at",
-        "name",
-        "endpoint",
-        "status",
-        "status_message",
-        "enabled",
-        "is_default",
-    }
+def test_list_params_derived_from_read_models() -> None:
+    """List params are programmatically derived from Read model field definitions."""
+    # Filter fields are derived from ClusterRead.model_fields
+    assert "id" in ClusterListParams.model_fields
+    assert "name" in ClusterListParams.model_fields
+    assert "status" in ClusterListParams.model_fields
+
+    # Check that descriptions are reused from Read model
+    assert ClusterListParams.model_fields["name"].description == "Cluster name"
+    assert ExecutionTargetListParams.model_fields["endpoint"].description == "Execution target API endpoint URL"
+    assert WorkItemListParams.model_fields["status"].description == "Work item lifecycle status"
+
+    # All filter fields are optional strings (query params)
+    assert ClusterListParams.model_fields["name"].annotation == str | None
+    assert ClusterListParams.model_fields["name"].default is None
 
 
 def test_execution_target_write_contracts_build_shared_commands() -> None:

@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from execution_plane_client.models.shared import EPListParams, ResourcesResponse
+from execution_plane_client.models.shared import ResourcesResponse, create_list_params
 
 
 class WorkItemStatus(StrEnum):
@@ -24,33 +24,38 @@ class WorkItemStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class WorkItemListParams(EPListParams):
-    """Work-item query controls and documented filter fields."""
-
-    id: str | None = Field(default=None, description="Filter by work item ID")
-    status: str | None = Field(default=None, description="Filter by work item status")
-    created_at: str | None = Field(default=None, description="Filter by creation time")
-    claimed_at: str | None = Field(default=None, description="Filter by claim time")
-    completed_at: str | None = Field(default=None, description="Filter by completion time")
-    resource_cleanup_status: str | None = Field(default=None, description="Filter by cleanup status")
-    resource_cleanup_error: str | None = Field(default=None, description="Filter by cleanup error")
-
-
 class WorkItemRead(BaseModel):
     """Safe work-item representation; excludes credentials and persistence internals."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
-    status: WorkItemStatus
-    result: dict[str, Any] | None
-    result_omitted: bool = False
-    result_size_bytes: int | None = None
-    created_at: datetime
-    claimed_at: datetime | None
-    completed_at: datetime | None
-    resource_cleanup_status: str
-    resource_cleanup_error: str | None
+    id: UUID = Field(description="Work item unique identifier")
+    status: WorkItemStatus = Field(description="Work item lifecycle status")
+    result: dict[str, Any] | None = Field(default=None, description="Work execution result payload")
+    result_omitted: bool = Field(default=False, description="Whether result was omitted due to size")
+    result_size_bytes: int | None = Field(default=None, description="Size of the result in bytes")
+    created_at: datetime = Field(description="Creation timestamp")
+    claimed_at: datetime | None = Field(default=None, description="Claim timestamp")
+    completed_at: datetime | None = Field(default=None, description="Completion timestamp")
+    resource_cleanup_status: str = Field(description="Resource cleanup status")
+    resource_cleanup_error: str | None = Field(default=None, description="Resource cleanup error details")
+
+
+# Programmatically create WorkItemListParams from WorkItemRead field definitions
+WorkItemListParams = create_list_params(
+    "WorkItemListParams",
+    WorkItemRead,
+    filterable_fields=[
+        "id",
+        "status",
+        "created_at",
+        "claimed_at",
+        "completed_at",
+        "resource_cleanup_status",
+        "resource_cleanup_error",
+    ],
+    sort_default="-created_at",  # Work items default to newest first
+)
 
 
 class WorkItemListResponse(ResourcesResponse[WorkItemRead]):
