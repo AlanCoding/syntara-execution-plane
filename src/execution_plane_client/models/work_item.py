@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,27 +27,13 @@ class WorkItemStatus(StrEnum):
 class WorkItemListParams(EPListParams):
     """Work-item query controls and documented filter fields."""
 
-    id: str | None = Field(default=None, description="Work UUID; id[in]=uuid1,uuid2 for membership")
-    status: str | None = Field(default=None, description="Work status; supports eq and in")
-    created_at: str | None = Field(
-        default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull"
-    )
-    claimed_at: str | None = Field(default=None, description="Claim time; supports ranges and isnull")
-    completed_at: str | None = Field(default=None, description="Completion time; supports ranges and isnull")
-    resource_cleanup_status: str | None = Field(default=None, description="Cleanup status; supports eq and in")
-    resource_cleanup_error: str | None = Field(
-        default=None, description="Cleanup error; supports text operators and isnull"
-    )
-    sort: Literal[
-        "created_at",
-        "-created_at",
-        "status",
-        "-status",
-        "resource_cleanup_status",
-        "-resource_cleanup_status",
-        "id",
-        "-id",
-    ] = Field(default="-created_at", description="Work-item sort field; newest first by default.")
+    id: str | None = Field(default=None, description="Filter by work item ID")
+    status: str | None = Field(default=None, description="Filter by work item status")
+    created_at: str | None = Field(default=None, description="Filter by creation time")
+    claimed_at: str | None = Field(default=None, description="Filter by claim time")
+    completed_at: str | None = Field(default=None, description="Filter by completion time")
+    resource_cleanup_status: str | None = Field(default=None, description="Filter by cleanup status")
+    resource_cleanup_error: str | None = Field(default=None, description="Filter by cleanup error")
 
 
 class WorkItemRead(BaseModel):

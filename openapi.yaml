@@ -67,20 +67,11 @@ paths:
         in: query
         required: false
         schema:
-          enum:
-          - created_at
-          - -created_at
-          - status
-          - -status
-          - resource_cleanup_status
-          - -resource_cleanup_status
-          - id
-          - -id
           type: string
-          description: Work-item sort field; newest first by default.
+          description: Sort field; prefix with '-' for descending order.
           default: -created_at
           title: Sort
-        description: Work-item sort field; newest first by default.
+        description: Sort field; prefix with '-' for descending order.
       - name: include_total
         in: query
         required: false
@@ -95,9 +86,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Work UUID; id[in]=uuid1,uuid2 for membership
+          description: Filter by work item ID
           title: Id
-        description: Work UUID; id[in]=uuid1,uuid2 for membership
+        description: Filter by work item ID
       - name: status
         in: query
         required: false
@@ -105,9 +96,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Work status; supports eq and in
+          description: Filter by work item status
           title: Status
-        description: Work status; supports eq and in
+        description: Filter by work item status
       - name: created_at
         in: query
         required: false
@@ -115,9 +106,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+          description: Filter by creation time
           title: Created At
-        description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+        description: Filter by creation time
       - name: claimed_at
         in: query
         required: false
@@ -125,9 +116,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Claim time; supports ranges and isnull
+          description: Filter by claim time
           title: Claimed At
-        description: Claim time; supports ranges and isnull
+        description: Filter by claim time
       - name: completed_at
         in: query
         required: false
@@ -135,9 +126,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Completion time; supports ranges and isnull
+          description: Filter by completion time
           title: Completed At
-        description: Completion time; supports ranges and isnull
+        description: Filter by completion time
       - name: resource_cleanup_status
         in: query
         required: false
@@ -145,9 +136,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cleanup status; supports eq and in
+          description: Filter by cleanup status
           title: Resource Cleanup Status
-        description: Cleanup status; supports eq and in
+        description: Filter by cleanup status
       - name: resource_cleanup_error
         in: query
         required: false
@@ -155,9 +146,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cleanup error; supports text operators and isnull
+          description: Filter by cleanup error
           title: Resource Cleanup Error
-        description: Cleanup error; supports text operators and isnull
+        description: Filter by cleanup error
       - name: id[operator]
         in: query
         required: false
@@ -278,28 +269,11 @@ paths:
         in: query
         required: false
         schema:
-          enum:
-          - id
-          - -id
-          - created_at
-          - -created_at
-          - name
-          - -name
-          - endpoint
-          - -endpoint
-          - status
-          - -status
-          - enabled
-          - -enabled
-          - is_default
-          - -is_default
-          - updated_at
-          - -updated_at
           type: string
-          description: Cluster sort field; oldest first by default.
+          description: Sort field; prefix with '-' for descending order.
           default: created_at
           title: Sort
-        description: Cluster sort field; oldest first by default.
+        description: Sort field; prefix with '-' for descending order.
       - name: include_total
         in: query
         required: false
@@ -314,9 +288,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cluster UUID; id[in]=uuid1,uuid2 for membership
+          description: Filter by cluster ID
           title: Id
-        description: Cluster UUID; id[in]=uuid1,uuid2 for membership
+        description: Filter by cluster ID
       - name: created_at
         in: query
         required: false
@@ -324,9 +298,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+          description: Filter by creation time
           title: Created At
-        description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+        description: Filter by creation time
       - name: updated_at
         in: query
         required: false
@@ -334,9 +308,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Update time; supports ranges and isnull
+          description: Filter by update time
           title: Updated At
-        description: Update time; supports ranges and isnull
+        description: Filter by update time
       - name: name
         in: query
         required: false
@@ -344,9 +318,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Name; supports eq, in, contains, and starts_with
+          description: Filter by cluster name
           title: Name
-        description: Name; supports eq, in, contains, and starts_with
+        description: Filter by cluster name
       - name: endpoint
         in: query
         required: false
@@ -354,9 +328,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Endpoint; supports eq, in, contains, and starts_with
+          description: Filter by cluster endpoint
           title: Endpoint
-        description: Endpoint; supports eq, in, contains, and starts_with
+        description: Filter by cluster endpoint
       - name: status
         in: query
         required: false
@@ -364,9 +338,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cluster status; supports eq and in
+          description: Filter by cluster status
           title: Status
-        description: Cluster status; supports eq and in
+        description: Filter by cluster status
       - name: status_message
         in: query
         required: false
@@ -374,9 +348,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Status message; supports text operators and isnull
+          description: Filter by status message
           title: Status Message
-        description: Status message; supports text operators and isnull
+        description: Filter by status message
       - name: enabled
         in: query
         required: false
@@ -384,9 +358,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Boolean; supports eq, in, and isnull
+          description: Filter by enabled state
           title: Enabled
-        description: Boolean; supports eq, in, and isnull
+        description: Filter by enabled state
       - name: is_default
         in: query
         required: false
@@ -394,9 +368,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Boolean; supports eq, in, and isnull
+          description: Filter by default cluster flag
           title: Is Default
-        description: Boolean; supports eq, in, and isnull
+        description: Filter by default cluster flag
       - name: id[operator]
         in: query
         required: false
@@ -538,30 +512,11 @@ paths:
         in: query
         required: false
         schema:
-          enum:
-          - id
-          - -id
-          - created_at
-          - -created_at
-          - name
-          - -name
-          - endpoint
-          - -endpoint
-          - status
-          - -status
-          - backend_type
-          - -backend_type
-          - cluster_id
-          - -cluster_id
-          - enabled
-          - -enabled
-          - is_default
-          - -is_default
           type: string
-          description: Execution-target sort field; oldest first by default.
+          description: Sort field; prefix with '-' for descending order.
           default: created_at
           title: Sort
-        description: Execution-target sort field; oldest first by default.
+        description: Sort field; prefix with '-' for descending order.
       - name: include_total
         in: query
         required: false
@@ -576,9 +531,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Target UUID; id[in]=uuid1,uuid2 for membership
+          description: Filter by target ID
           title: Id
-        description: Target UUID; id[in]=uuid1,uuid2 for membership
+        description: Filter by target ID
       - name: cluster_id
         in: query
         required: false
@@ -586,9 +541,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Physical cluster UUID; supports eq and in
+          description: Filter by cluster ID
           title: Cluster Id
-        description: Physical cluster UUID; supports eq and in
+        description: Filter by cluster ID
       - name: name
         in: query
         required: false
@@ -596,9 +551,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Name; supports eq, in, contains, and starts_with
+          description: Filter by target name
           title: Name
-        description: Name; supports eq, in, contains, and starts_with
+        description: Filter by target name
       - name: endpoint
         in: query
         required: false
@@ -606,9 +561,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Endpoint; supports eq, in, contains, and starts_with
+          description: Filter by target endpoint
           title: Endpoint
-        description: Endpoint; supports eq, in, contains, and starts_with
+        description: Filter by target endpoint
       - name: status
         in: query
         required: false
@@ -616,9 +571,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Target status; supports eq and in
+          description: Filter by target status
           title: Status
-        description: Target status; supports eq and in
+        description: Filter by target status
       - name: backend_type
         in: query
         required: false
@@ -626,9 +581,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Backend type; supports eq and in
+          description: Filter by backend type
           title: Backend Type
-        description: Backend type; supports eq and in
+        description: Filter by backend type
       - name: enabled
         in: query
         required: false
@@ -636,9 +591,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Boolean; supports eq, in, and isnull
+          description: Filter by enabled state
           title: Enabled
-        description: Boolean; supports eq, in, and isnull
+        description: Filter by enabled state
       - name: is_default
         in: query
         required: false
@@ -646,9 +601,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Boolean; supports eq, in, and isnull
+          description: Filter by default target flag
           title: Is Default
-        description: Boolean; supports eq, in, and isnull
+        description: Filter by default target flag
       - name: created_at
         in: query
         required: false
@@ -656,9 +611,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+          description: Filter by creation time
           title: Created At
-        description: Creation time; supports eq, in, gt, gte, lt, lte, and isnull
+        description: Filter by creation time
       - name: last_ran_at
         in: query
         required: false
@@ -666,9 +621,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Last run time; supports ranges and isnull
+          description: Filter by last run time
           title: Last Ran At
-        description: Last run time; supports ranges and isnull
+        description: Filter by last run time
       - name: status_message
         in: query
         required: false
@@ -676,9 +631,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Status message; supports text operators and isnull
+          description: Filter by status message
           title: Status Message
-        description: Status message; supports text operators and isnull
+        description: Filter by status message
       - name: id[operator]
         in: query
         required: false

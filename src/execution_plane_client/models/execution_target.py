@@ -121,39 +121,18 @@ ExecutionTargetPlacement = Annotated[
 class ExecutionTargetListParams(EPListParams):
     """Execution-target query controls and documented filter fields."""
 
-    id: str | None = Field(default=None, description="Target UUID; id[in]=uuid1,uuid2 for membership")
-    cluster_id: str | None = Field(default=None, description="Physical cluster UUID; supports eq and in")
-    name: str | None = Field(default=None, description="Name; supports eq, in, contains, and starts_with")
-    endpoint: str | None = Field(default=None, description="Endpoint; supports eq, in, contains, and starts_with")
-    status: str | None = Field(default=None, description="Target status; supports eq and in")
-    backend_type: str | None = Field(default=None, description="Backend type; supports eq and in")
-    enabled: str | None = Field(default=None, description="Boolean; supports eq, in, and isnull")
-    is_default: str | None = Field(default=None, description="Boolean; supports eq, in, and isnull")
-    created_at: str | None = Field(
-        default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull"
-    )
-    last_ran_at: str | None = Field(default=None, description="Last run time; supports ranges and isnull")
-    status_message: str | None = Field(default=None, description="Status message; supports text operators and isnull")
-    sort: Literal[
-        "id",
-        "-id",
-        "created_at",
-        "-created_at",
-        "name",
-        "-name",
-        "endpoint",
-        "-endpoint",
-        "status",
-        "-status",
-        "backend_type",
-        "-backend_type",
-        "cluster_id",
-        "-cluster_id",
-        "enabled",
-        "-enabled",
-        "is_default",
-        "-is_default",
-    ] = Field(default="created_at", description="Execution-target sort field; oldest first by default.")
+    sort: str = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
+    id: str | None = Field(default=None, description="Filter by target ID")
+    cluster_id: str | None = Field(default=None, description="Filter by cluster ID")
+    name: str | None = Field(default=None, description="Filter by target name")
+    endpoint: str | None = Field(default=None, description="Filter by target endpoint")
+    status: str | None = Field(default=None, description="Filter by target status")
+    backend_type: str | None = Field(default=None, description="Filter by backend type")
+    enabled: str | None = Field(default=None, description="Filter by enabled state")
+    is_default: str | None = Field(default=None, description="Filter by default target flag")
+    created_at: str | None = Field(default=None, description="Filter by creation time")
+    last_ran_at: str | None = Field(default=None, description="Filter by last run time")
+    status_message: str | None = Field(default=None, description="Filter by status message")
 
 
 class ExecutionTargetRead(BaseModel):
