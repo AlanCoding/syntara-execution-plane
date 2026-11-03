@@ -211,7 +211,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResourcesResponse_WorkItemRead_'
+                $ref: '#/components/schemas/WorkItemListResponse'
         '422':
           description: Invalid query parameters or cursor
   /v1/work-items/{resource_id}:
@@ -454,7 +454,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResourcesResponse_ClusterRead_'
+                $ref: '#/components/schemas/ClusterListResponse'
         '422':
           description: Invalid query parameters or cursor
   /v1/clusters/{resource_id}:
@@ -733,7 +733,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResourcesResponse_ExecutionTargetRead_'
+                $ref: '#/components/schemas/ExecutionTargetListResponse'
         '422':
           description: Invalid query parameters or cursor
   /v1/execution-targets/{resource_id}:
@@ -792,6 +792,33 @@ components:
       - commands
       title: CapabilitiesRead
       description: Command revisions installed by this participant.
+    ClusterListResponse:
+      properties:
+        resources:
+          items:
+            $ref: '#/components/schemas/ClusterRead'
+          type: array
+          title: Resources
+        next:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next
+        prev:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prev
+        total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total
+      type: object
+      required:
+      - resources
+      title: ClusterListResponse
+      description: Paginated list response for clusters.
     ClusterRead:
       properties:
         id:
@@ -868,6 +895,33 @@ components:
       - credential
       title: CredentialResolveCommandResult
       description: Typed result returned for a credential-resolution command.
+    ExecutionTargetListResponse:
+      properties:
+        resources:
+          items:
+            $ref: '#/components/schemas/ExecutionTargetRead'
+          type: array
+          title: Resources
+        next:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next
+        prev:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prev
+        total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total
+      type: object
+      required:
+      - resources
+      title: ExecutionTargetListResponse
+      description: Paginated list response for execution targets.
     ExecutionTargetRead:
       properties:
         id:
@@ -1020,84 +1074,6 @@ components:
       - resource_id
       title: ResourceReference
       description: Safe reference from a command to a participant-owned resource.
-    ResourcesResponse_ClusterRead_:
-      properties:
-        resources:
-          items:
-            $ref: '#/components/schemas/ClusterRead'
-          type: array
-          title: Resources
-        next:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Next
-        prev:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Prev
-        total:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Total
-      type: object
-      required:
-      - resources
-      title: ResourcesResponse[ClusterRead]
-    ResourcesResponse_ExecutionTargetRead_:
-      properties:
-        resources:
-          items:
-            $ref: '#/components/schemas/ExecutionTargetRead'
-          type: array
-          title: Resources
-        next:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Next
-        prev:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Prev
-        total:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Total
-      type: object
-      required:
-      - resources
-      title: ResourcesResponse[ExecutionTargetRead]
-    ResourcesResponse_WorkItemRead_:
-      properties:
-        resources:
-          items:
-            $ref: '#/components/schemas/WorkItemRead'
-          type: array
-          title: Resources
-        next:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Next
-        prev:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Prev
-        total:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Total
-      type: object
-      required:
-      - resources
-      title: ResourcesResponse[WorkItemRead]
     TargetHealthCommandResult:
       properties:
         command_type:
@@ -1199,6 +1175,33 @@ components:
       - msg
       - type
       title: ValidationError
+    WorkItemListResponse:
+      properties:
+        resources:
+          items:
+            $ref: '#/components/schemas/WorkItemRead'
+          type: array
+          title: Resources
+        next:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next
+        prev:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prev
+        total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total
+      type: object
+      required:
+      - resources
+      title: WorkItemListResponse
+      description: Paginated list response for work items.
     WorkItemRead:
       properties:
         id:

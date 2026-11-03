@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from execution_plane_client.models.shared import EPListParams
+from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
 
 class ClusterListParams(EPListParams):
@@ -38,3 +38,7 @@ class ClusterRead(BaseModel):
     labels: dict[str, str]
     created_at: datetime
     updated_at: datetime
+
+
+class ClusterListResponse(ResourcesResponse[ClusterRead]):
+    """Paginated list response for clusters."""

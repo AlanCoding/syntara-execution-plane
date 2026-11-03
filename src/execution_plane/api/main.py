@@ -43,13 +43,17 @@ from execution_plane.work_item.errors import DuplicateWorkItemError, WorkItemNot
 from execution_plane_client.catalog import CommandCatalog
 from execution_plane_client.commands.results import TransportReceipt
 from execution_plane_client.errors import ProtocolConflict, UnsupportedCommand
-from execution_plane_client.models.cluster import ClusterListParams, ClusterRead  # noqa: TC001
+from execution_plane_client.models.cluster import ClusterListParams, ClusterListResponse, ClusterRead  # noqa: TC001
 from execution_plane_client.models.execution_target import (  # noqa: TC001
     ExecutionTargetListParams,
+    ExecutionTargetListResponse,
     ExecutionTargetRead,
 )
-from execution_plane_client.models.shared import ResourcesResponse
-from execution_plane_client.models.work_item import WorkItemListParams, WorkItemRead  # noqa: TC001
+from execution_plane_client.models.work_item import (  # noqa: TC001
+    WorkItemListParams,
+    WorkItemListResponse,
+    WorkItemRead,
+)
 from execution_plane_client.protocol import CapabilitiesRead, MessageEnvelope
 
 if TYPE_CHECKING:
@@ -183,7 +187,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         request: Request,
         identity: Annotated[ServiceIdentity, Depends(require_scope("work-items:read"))],
         params: Annotated[WorkItemListParams, Query()],
-    ) -> ResourcesResponse[WorkItemRead]:
+    ) -> WorkItemListResponse:
         sort_field, sort_direction = params.sort_order
         filters = list_query_filters(request)
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
@@ -220,7 +224,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         request: Request,
         identity: Annotated[ServiceIdentity, Depends(require_scope("clusters:read"))],
         params: Annotated[ClusterListParams, Query()],
-    ) -> ResourcesResponse[ClusterRead]:
+    ) -> ClusterListResponse:
         sort_field, sort_direction = params.sort_order
         filters = list_query_filters(request)
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
@@ -257,7 +261,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         request: Request,
         identity: Annotated[ServiceIdentity, Depends(require_scope("execution-targets:read"))],
         params: Annotated[ExecutionTargetListParams, Query()],
-    ) -> ResourcesResponse[ExecutionTargetRead]:
+    ) -> ExecutionTargetListResponse:
         sort_field, sort_direction = params.sort_order
         filters = list_query_filters(request)
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)

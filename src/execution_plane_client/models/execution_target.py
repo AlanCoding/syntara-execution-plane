@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic.json_schema import SkipJsonSchema
 
 from execution_plane_client.commands.targets import KubernetesPlacement as CommandKubernetesPlacement
-from execution_plane_client.models.shared import EPListParams
+from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
 _LABEL_NAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?$")
 _DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
@@ -153,6 +153,10 @@ class ExecutionTargetRead(BaseModel):
     labels: dict[str, str]
     created_at: datetime
     last_ran_at: datetime | None
+
+
+class ExecutionTargetListResponse(ResourcesResponse[ExecutionTargetRead]):
+    """Paginated list response for execution targets."""
 
 
 class KubernetesTargetPlacement(CommandKubernetesPlacement):

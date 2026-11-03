@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from execution_plane_client.models.shared import EPListParams
+from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
 
 class WorkItemStatus(StrEnum):
@@ -51,3 +51,7 @@ class WorkItemRead(BaseModel):
     completed_at: datetime | None
     resource_cleanup_status: str
     resource_cleanup_error: str | None
+
+
+class WorkItemListResponse(ResourcesResponse[WorkItemRead]):
+    """Paginated list response for work items."""
