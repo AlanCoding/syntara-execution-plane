@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from execution_plane_client.models.shared import ResourcesResponse, create_list_params
+from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
 
 class ClusterRead(BaseModel):
@@ -25,23 +25,20 @@ class ClusterRead(BaseModel):
     updated_at: datetime = Field(description="Last update timestamp")
 
 
-# Programmatically create ClusterListParams from ClusterRead field definitions
-ClusterListParams = create_list_params(
-    "ClusterListParams",
-    ClusterRead,
-    filterable_fields=[
-        "id",
-        "created_at",
-        "updated_at",
-        "name",
-        "endpoint",
-        "status",
-        "status_message",
-        "enabled",
-        "is_default",
-    ],
-    sort_default="created_at",
-)
+class ClusterListParams(EPListParams):
+    """Query parameters for listing clusters."""
+
+    id: str | None = Field(default=None, description="Filter by id")
+    name: str | None = Field(default=None, description="Filter by name")
+    endpoint: str | None = Field(default=None, description="Filter by endpoint")
+    status: str | None = Field(default=None, description="Filter by status")
+    status_message: str | None = Field(default=None, description="Filter by status_message")
+    enabled: str | None = Field(default=None, description="Filter by enabled")
+    is_default: str | None = Field(default=None, description="Filter by is_default")
+    created_at: str | None = Field(default=None, description="Filter by created_at")
+    updated_at: str | None = Field(default=None, description="Filter by updated_at")
+
+    sort: str = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
 
 
 class ClusterListResponse(ResourcesResponse[ClusterRead]):

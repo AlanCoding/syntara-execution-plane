@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from execution_plane_client.models.shared import ResourcesResponse, create_list_params
+from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
 
 class WorkItemStatus(StrEnum):
@@ -41,21 +41,18 @@ class WorkItemRead(BaseModel):
     resource_cleanup_error: str | None = Field(default=None, description="Resource cleanup error details")
 
 
-# Programmatically create WorkItemListParams from WorkItemRead field definitions
-WorkItemListParams = create_list_params(
-    "WorkItemListParams",
-    WorkItemRead,
-    filterable_fields=[
-        "id",
-        "status",
-        "created_at",
-        "claimed_at",
-        "completed_at",
-        "resource_cleanup_status",
-        "resource_cleanup_error",
-    ],
-    sort_default="-created_at",  # Work items default to newest first
-)
+class WorkItemListParams(EPListParams):
+    """Query parameters for listing work items."""
+
+    id: str | None = Field(default=None, description="Filter by id")
+    status: str | None = Field(default=None, description="Filter by status")
+    created_at: str | None = Field(default=None, description="Filter by created_at")
+    claimed_at: str | None = Field(default=None, description="Filter by claimed_at")
+    completed_at: str | None = Field(default=None, description="Filter by completed_at")
+    resource_cleanup_status: str | None = Field(default=None, description="Filter by resource_cleanup_status")
+    resource_cleanup_error: str | None = Field(default=None, description="Filter by resource_cleanup_error")
+
+    sort: str = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
 
 
 class WorkItemListResponse(ResourcesResponse[WorkItemRead]):

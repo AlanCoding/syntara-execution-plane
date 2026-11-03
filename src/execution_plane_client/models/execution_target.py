@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic.json_schema import SkipJsonSchema
 
 from execution_plane_client.commands.targets import KubernetesPlacement as CommandKubernetesPlacement
-from execution_plane_client.models.shared import ResourcesResponse, create_list_params
+from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
 _LABEL_NAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?$")
 _DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
@@ -138,25 +138,22 @@ class ExecutionTargetRead(BaseModel):
     last_ran_at: datetime | None = Field(default=None, description="Last execution timestamp")
 
 
-# Programmatically create ExecutionTargetListParams from ExecutionTargetRead field definitions
-ExecutionTargetListParams = create_list_params(
-    "ExecutionTargetListParams",
-    ExecutionTargetRead,
-    filterable_fields=[
-        "id",
-        "created_at",
-        "name",
-        "endpoint",
-        "status",
-        "backend_type",
-        "cluster_id",
-        "enabled",
-        "is_default",
-        "last_ran_at",
-        "status_message",
-    ],
-    sort_default="created_at",
-)
+class ExecutionTargetListParams(EPListParams):
+    """Query parameters for listing execution targets."""
+
+    id: str | None = Field(default=None, description="Filter by id")
+    cluster_id: str | None = Field(default=None, description="Filter by cluster_id")
+    name: str | None = Field(default=None, description="Filter by name")
+    backend_type: str | None = Field(default=None, description="Filter by backend_type")
+    endpoint: str | None = Field(default=None, description="Filter by endpoint")
+    status: str | None = Field(default=None, description="Filter by status")
+    enabled: str | None = Field(default=None, description="Filter by enabled")
+    is_default: str | None = Field(default=None, description="Filter by is_default")
+    status_message: str | None = Field(default=None, description="Filter by status_message")
+    created_at: str | None = Field(default=None, description="Filter by created_at")
+    last_ran_at: str | None = Field(default=None, description="Filter by last_ran_at")
+
+    sort: str = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
 
 
 class ExecutionTargetListResponse(ResourcesResponse[ExecutionTargetRead]):
