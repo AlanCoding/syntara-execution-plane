@@ -64,11 +64,9 @@ class ExecutionTarget(SQLModel, table=True):
         {"schema": EP_SCHEMA},
     )
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, description="Execution target UUID")
-    cluster_id: uuid.UUID = Field(
-        foreign_key=f"{EP_SCHEMA}.clusters.id", nullable=False, description="Parent cluster UUID"
-    )
-    name: str = Field(description="Execution target name")
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    cluster_id: uuid.UUID = Field(foreign_key=f"{EP_SCHEMA}.clusters.id", nullable=False)
+    name: str
     # The migration stores enum values in VARCHAR columns, not native PG enums.
     backend_type: BackendType = Field(
         sa_column=Column(
@@ -77,9 +75,8 @@ class ExecutionTarget(SQLModel, table=True):
             ),
             nullable=False,
         ),
-        description="Backend execution platform type",
     )
-    endpoint: str = Field(description="Execution target API endpoint URL")
+    endpoint: str
     placement: ExecutionTargetPlacementTypes = Field(
         sa_type=DiscriminatedJSONB(ExecutionTargetPlacement),  # type: ignore[arg-type, call-overload]
         sa_column_kwargs={"nullable": False},
@@ -94,25 +91,16 @@ class ExecutionTarget(SQLModel, table=True):
             ),
             nullable=False,
         ),
-        description="Execution target lifecycle status",
     )
-    enabled: bool = Field(default=True, description="Whether the target is enabled for use")
-    is_default: bool = Field(
-        default=False, nullable=False, description="Whether this is the default target for the cluster"
-    )
+    enabled: bool = True
+    is_default: bool = Field(default=False, nullable=False)
     credential_ref: uuid.UUID = Field(sa_column=Column(Uuid(), nullable=False))
-    status_message: str | None = Field(
-        default=None, nullable=True, description="Human-readable status message or error details"
-    )
+    status_message: str | None = Field(default=None, nullable=True)
     labels: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
     created_by: uuid.UUID = Field(nullable=False)
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False), description="Creation timestamp"
-    )
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_by: uuid.UUID = Field(nullable=False)
     updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
-    last_ran_at: datetime | None = Field(
-        default=None, sa_column=Column(DateTime(timezone=True), nullable=True), description="Last execution timestamp"
-    )
+    last_ran_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
     cluster: "Cluster" = Relationship(back_populates="execution_targets")

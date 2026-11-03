@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic.json_schema import SkipJsonSchema
 
 from execution_plane_client.commands.targets import KubernetesPlacement as CommandKubernetesPlacement
-from execution_plane_client.models._generated_list_params import ExecutionTargetListParamsBase
+from execution_plane_client.models.shared import EPListParams
 
 _LABEL_NAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?$")
 _DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
@@ -118,8 +118,42 @@ ExecutionTargetPlacement = Annotated[
 ]
 
 
-class ExecutionTargetListParams(ExecutionTargetListParamsBase):
+class ExecutionTargetListParams(EPListParams):
     """Execution-target query controls and documented filter fields."""
+
+    id: str | None = Field(default=None, description="Target UUID; id[in]=uuid1,uuid2 for membership")
+    cluster_id: str | None = Field(default=None, description="Physical cluster UUID; supports eq and in")
+    name: str | None = Field(default=None, description="Name; supports eq, in, contains, and starts_with")
+    endpoint: str | None = Field(default=None, description="Endpoint; supports eq, in, contains, and starts_with")
+    status: str | None = Field(default=None, description="Target status; supports eq and in")
+    backend_type: str | None = Field(default=None, description="Backend type; supports eq and in")
+    enabled: str | None = Field(default=None, description="Boolean; supports eq, in, and isnull")
+    is_default: str | None = Field(default=None, description="Boolean; supports eq, in, and isnull")
+    created_at: str | None = Field(
+        default=None, description="Creation time; supports eq, in, gt, gte, lt, lte, and isnull"
+    )
+    last_ran_at: str | None = Field(default=None, description="Last run time; supports ranges and isnull")
+    status_message: str | None = Field(default=None, description="Status message; supports text operators and isnull")
+    sort: Literal[
+        "id",
+        "-id",
+        "created_at",
+        "-created_at",
+        "name",
+        "-name",
+        "endpoint",
+        "-endpoint",
+        "status",
+        "-status",
+        "backend_type",
+        "-backend_type",
+        "cluster_id",
+        "-cluster_id",
+        "enabled",
+        "-enabled",
+        "is_default",
+        "-is_default",
+    ] = Field(default="created_at", description="Execution-target sort field; oldest first by default.")
 
 
 class ExecutionTargetRead(BaseModel):
