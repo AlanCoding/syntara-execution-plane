@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,7 +52,16 @@ class WorkItemListParams(EPListParams):
     resource_cleanup_status: str | None = Field(default=None, description="Filter by resource_cleanup_status")
     resource_cleanup_error: str | None = Field(default=None, description="Filter by resource_cleanup_error")
 
-    sort: str = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
+    sort: Literal[
+        "created_at",
+        "-created_at",
+        "status",
+        "-status",
+        "resource_cleanup_status",
+        "-resource_cleanup_status",
+        "id",
+        "-id",
+    ] = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
 
 
 class WorkItemListResponse(ResourcesResponse[WorkItemRead]):
