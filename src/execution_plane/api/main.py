@@ -43,13 +43,13 @@ from execution_plane.work_item.errors import DuplicateWorkItemError, WorkItemNot
 from execution_plane_client.catalog import CommandCatalog
 from execution_plane_client.commands.results import TransportReceipt
 from execution_plane_client.errors import ProtocolConflict, UnsupportedCommand
-from execution_plane_client.models.cluster import ClusterListParams, ClusterListResponse, ClusterRead  # noqa: TC001
-from execution_plane_client.models.execution_target import (  # noqa: TC001
+from execution_plane_client.models.cluster import ClusterListParams, ClusterListResponse, ClusterRead
+from execution_plane_client.models.execution_target import (
     ExecutionTargetListParams,
     ExecutionTargetListResponse,
     ExecutionTargetRead,
 )
-from execution_plane_client.models.work_item import (  # noqa: TC001
+from execution_plane_client.models.work_item import (
     WorkItemListParams,
     WorkItemListResponse,
     WorkItemRead,
@@ -205,7 +205,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
             raw, params.limit, params.cursor, sort_field=sort_field, sort_direction=sort_direction
         )
         total = await queries.count_work_items(filters) if params.include_total else None
-        return ResourcesResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)
+        return WorkItemListResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)
 
     @app.get("/v1/work-items/{resource_id}")
     async def work_item(
@@ -242,7 +242,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
             raw, params.limit, params.cursor, sort_field=sort_field, sort_direction=sort_direction
         )
         total = await queries.count_clusters(filters) if params.include_total else None
-        return ResourcesResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)
+        return ClusterListResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)
 
     @app.get("/v1/clusters/{resource_id}")
     async def cluster(
@@ -279,7 +279,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
             raw, params.limit, params.cursor, sort_field=sort_field, sort_direction=sort_direction
         )
         total = await queries.count_targets(filters) if params.include_total else None
-        return ResourcesResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)
+        return ExecutionTargetListResponse(resources=trimmed, next=next_cur, prev=prev_cur, total=total)
 
     @app.get("/v1/execution-targets/{resource_id}")
     async def target(

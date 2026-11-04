@@ -86,9 +86,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Work item unique identifier
+          description: Filter by id
           title: Id
-        description: Work item unique identifier
+        description: Filter by id
       - name: status
         in: query
         required: false
@@ -96,9 +96,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Work item lifecycle status
+          description: Filter by status
           title: Status
-        description: Work item lifecycle status
+        description: Filter by status
       - name: created_at
         in: query
         required: false
@@ -106,9 +106,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Creation timestamp
+          description: Filter by created_at
           title: Created At
-        description: Creation timestamp
+        description: Filter by created_at
       - name: claimed_at
         in: query
         required: false
@@ -116,9 +116,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Claim timestamp
+          description: Filter by claimed_at
           title: Claimed At
-        description: Claim timestamp
+        description: Filter by claimed_at
       - name: completed_at
         in: query
         required: false
@@ -126,9 +126,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Completion timestamp
+          description: Filter by completed_at
           title: Completed At
-        description: Completion timestamp
+        description: Filter by completed_at
       - name: resource_cleanup_status
         in: query
         required: false
@@ -136,9 +136,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Resource cleanup status
+          description: Filter by resource_cleanup_status
           title: Resource Cleanup Status
-        description: Resource cleanup status
+        description: Filter by resource_cleanup_status
       - name: resource_cleanup_error
         in: query
         required: false
@@ -146,9 +146,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Resource cleanup error details
+          description: Filter by resource_cleanup_error
           title: Resource Cleanup Error
-        description: Resource cleanup error details
+        description: Filter by resource_cleanup_error
       - name: id[operator]
         in: query
         required: false
@@ -288,29 +288,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cluster unique identifier
+          description: Filter by id
           title: Id
-        description: Cluster unique identifier
-      - name: created_at
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Creation timestamp
-          title: Created At
-        description: Creation timestamp
-      - name: updated_at
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Last update timestamp
-          title: Updated At
-        description: Last update timestamp
+        description: Filter by id
       - name: name
         in: query
         required: false
@@ -318,9 +298,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cluster name
+          description: Filter by name
           title: Name
-        description: Cluster name
+        description: Filter by name
       - name: endpoint
         in: query
         required: false
@@ -328,9 +308,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cluster API endpoint URL
+          description: Filter by endpoint
           title: Endpoint
-        description: Cluster API endpoint URL
+        description: Filter by endpoint
       - name: status
         in: query
         required: false
@@ -338,9 +318,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Cluster lifecycle status
+          description: Filter by status
           title: Status
-        description: Cluster lifecycle status
+        description: Filter by status
       - name: status_message
         in: query
         required: false
@@ -348,9 +328,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Human-readable status message or error details
+          description: Filter by status_message
           title: Status Message
-        description: Human-readable status message or error details
+        description: Filter by status_message
       - name: enabled
         in: query
         required: false
@@ -358,9 +338,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Whether the cluster is enabled for use
+          description: Filter by enabled
           title: Enabled
-        description: Whether the cluster is enabled for use
+        description: Filter by enabled
       - name: is_default
         in: query
         required: false
@@ -368,9 +348,29 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Whether this is the default cluster
+          description: Filter by is_default
           title: Is Default
-        description: Whether this is the default cluster
+        description: Filter by is_default
+      - name: created_at
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by created_at
+          title: Created At
+        description: Filter by created_at
+      - name: updated_at
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by updated_at
+          title: Updated At
+        description: Filter by updated_at
       - name: id[operator]
         in: query
         required: false
@@ -531,59 +531,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Execution target unique identifier
+          description: Filter by id
           title: Id
-        description: Execution target unique identifier
-      - name: created_at
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Creation timestamp
-          title: Created At
-        description: Creation timestamp
-      - name: name
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Execution target name
-          title: Name
-        description: Execution target name
-      - name: endpoint
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Execution target API endpoint URL
-          title: Endpoint
-        description: Execution target API endpoint URL
-      - name: status
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Execution target lifecycle status
-          title: Status
-        description: Execution target lifecycle status
-      - name: backend_type
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Backend execution platform type
-          title: Backend Type
-        description: Backend execution platform type
+        description: Filter by id
       - name: cluster_id
         in: query
         required: false
@@ -591,9 +541,49 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Parent cluster identifier
+          description: Filter by cluster_id
           title: Cluster Id
-        description: Parent cluster identifier
+        description: Filter by cluster_id
+      - name: name
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by name
+          title: Name
+        description: Filter by name
+      - name: backend_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by backend_type
+          title: Backend Type
+        description: Filter by backend_type
+      - name: endpoint
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by endpoint
+          title: Endpoint
+        description: Filter by endpoint
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by status
+          title: Status
+        description: Filter by status
       - name: enabled
         in: query
         required: false
@@ -601,9 +591,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Whether the target is enabled for use
+          description: Filter by enabled
           title: Enabled
-        description: Whether the target is enabled for use
+        description: Filter by enabled
       - name: is_default
         in: query
         required: false
@@ -611,19 +601,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Whether this is the default target for the cluster
+          description: Filter by is_default
           title: Is Default
-        description: Whether this is the default target for the cluster
-      - name: last_ran_at
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Last execution timestamp
-          title: Last Ran At
-        description: Last execution timestamp
+        description: Filter by is_default
       - name: status_message
         in: query
         required: false
@@ -631,9 +611,29 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Human-readable status message or error details
+          description: Filter by status_message
           title: Status Message
-        description: Human-readable status message or error details
+        description: Filter by status_message
+      - name: created_at
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by created_at
+          title: Created At
+        description: Filter by created_at
+      - name: last_ran_at
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by last_ran_at
+          title: Last Ran At
+        description: Filter by last_ran_at
       - name: id[operator]
         in: query
         required: false
