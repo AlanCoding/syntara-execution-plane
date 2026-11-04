@@ -19,7 +19,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from execution_plane.api.auth import ServiceIdentity, get_service_identity, require_scope
-from execution_plane.api.list_queries import list_query_filters
 from execution_plane.api.openapi import configure_command_openapi
 from execution_plane.api.pagination import (
     generate_response,
@@ -58,6 +57,19 @@ if TYPE_CHECKING:
 
 logger = structlog.stdlib.get_logger(__name__)
 _BODY_LIMIT = 1024 * 1024
+
+
+def _extract_filters(request: Request) -> dict[str, str]:
+    """Extract filter parameters from query string, excluding pagination/sort controls.
+
+    In syntara, this filtering happens in BaseService.list_resources where it builds
+    query_params from query_params_items. We use a static method here since EP doesn't
+    yet use syntara's BaseService class structure.
+
+    See: syntara.core.services.base.BaseService.list_resources
+    """
+    excluded_params = {"limit", "cursor", "sort", "include_total"}
+    return {key: value for key, value in request.query_params.items() if key not in excluded_params}
 
 
 @asynccontextmanager
@@ -185,7 +197,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         params: Annotated[WorkItemListParams, Query()],
     ) -> WorkItemListResponse:
         sort_field, sort_direction = params.sort_order
-        filters = list_query_filters(request)
+        filters = _extract_filters(request)
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
             raw = await queries.work_items(
@@ -221,7 +233,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         params: Annotated[ClusterListParams, Query()],
     ) -> ClusterListResponse:
         sort_field, sort_direction = params.sort_order
-        filters = list_query_filters(request)
+        filters = _extract_filters(request)
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
             raw = await queries.clusters(
@@ -257,7 +269,7 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         params: Annotated[ExecutionTargetListParams, Query()],
     ) -> ExecutionTargetListResponse:
         sort_field, sort_direction = params.sort_order
-        filters = list_query_filters(request)
+        filters = _extract_filters(request)
         queries = EPResourceQueries(request.app.state.ep_engine, identity.client_id)
         try:
             raw = await queries.targets(
