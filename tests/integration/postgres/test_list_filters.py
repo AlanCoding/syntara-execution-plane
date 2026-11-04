@@ -273,5 +273,5 @@ async def test_get_openapi_documents_list_filters_and_sort_fields(list_api):
     assert by_name["sort"]["schema"]["type"] == "string"
     assert "default" in by_name["sort"]["schema"]
     assert "enum" not in by_name["sort"]["schema"]  # Server-side validation like syntara
-    # Labels only on cluster/target endpoints
-    assert ("labels[key]" in by_name) == (list_api.path != "/v1/work-items")
+    # Label filtering works functionally but not documented in OpenAPI (like bracket operators)
+    assert "labels[key]" not in by_name  # Server-side only, not in spec
