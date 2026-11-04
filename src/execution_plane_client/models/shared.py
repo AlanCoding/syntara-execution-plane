@@ -12,7 +12,7 @@ class EPListParams(BaseModel):
 
     limit: int = Field(default=20, gt=0, le=100)
     cursor: str | None = Field(default=None)
-    sort: str = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
+    sort: str = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
     include_total: bool = Field(default=False)
 
     @property

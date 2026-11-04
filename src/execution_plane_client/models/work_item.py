@@ -70,6 +70,8 @@ class WorkItemListParams(EPListParams):
     resource_cleanup_status: str | None = Field(default=None, description="Filter by resource_cleanup_status")
     resource_cleanup_error: str | None = Field(default=None, description="Filter by resource_cleanup_error")
 
+    sort: str = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
+
 
 class WorkItemListResponse(ResourcesResponse[WorkItemRead]):
     """Paginated list response for work items."""

@@ -180,8 +180,6 @@ class ExecutionTargetListParams(EPListParams):
     created_at: str | None = Field(default=None, description="Filter by created_at")
     last_ran_at: str | None = Field(default=None, description="Filter by last_ran_at")
 
-    sort: str = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
-
 
 class ExecutionTargetListResponse(ResourcesResponse[ExecutionTargetRead]):
     """Paginated list response for execution targets."""

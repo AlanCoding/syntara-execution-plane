@@ -62,8 +62,6 @@ class ClusterListParams(EPListParams):
     created_at: str | None = Field(default=None, description="Filter by created_at")
     updated_at: str | None = Field(default=None, description="Filter by updated_at")
 
-    sort: str = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
-
 
 class ClusterListResponse(ResourcesResponse[ClusterRead]):
     """Paginated list response for clusters."""
