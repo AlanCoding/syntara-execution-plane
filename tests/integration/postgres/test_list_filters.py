@@ -253,12 +253,19 @@ async def test_get_list_rejects_invalid_typed_sort_cursor(list_api, field, sort_
 
 
 async def test_get_openapi_documents_list_filters_and_sort_fields(list_api):
+    """OpenAPI documents simple filter fields matching syntara pattern.
+
+    Bracket operators (id[in], created_at[gt], etc.) still work functionally but
+    are not documented in the OpenAPI spec, matching syntara's credential endpoint.
+    """
     response = await list_api.client.get("/openapi.json")
     assert response.status_code == 200
     parameters = response.json()["paths"][list_api.path]["get"]["parameters"]
     by_name = {parameter["name"]: parameter for parameter in parameters}
     assert {"id", "created_at", "status", "limit", "cursor", "include_total"} <= by_name.keys()
-    assert "in" in by_name["id"]["description"]
+    # Simple "Filter by X" descriptions, no bracket operator documentation
+    assert by_name["id"]["description"] == "Filter by id"
+    assert by_name["created_at"]["description"] == "Filter by created_at"
     assert "gte" in by_name["created_at"]["description"]
     assert "id[in]" not in by_name
     assert "created_at[gte]" not in by_name
