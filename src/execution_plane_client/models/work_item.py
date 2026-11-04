@@ -9,6 +9,26 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
+# Work item query metadata - single source of truth for EP and client
+WORK_ITEM_FILTERABLE_FIELDS = [
+    "id",
+    "status",
+    "created_at",
+    "claimed_at",
+    "completed_at",
+    "resource_cleanup_status",
+    "resource_cleanup_error",
+]
+
+WORK_ITEM_SORTABLE_FIELDS = [
+    "created_at",
+    "status",
+    "resource_cleanup_status",
+    "id",
+]
+
+WORK_ITEM_SORT_DEFAULT = "-created_at"
+
 
 class WorkItemStatus(StrEnum):
     """Lifecycle states of a dispatched work item."""
@@ -52,6 +72,7 @@ class WorkItemListParams(EPListParams):
     resource_cleanup_status: str | None = Field(default=None, description="Filter by resource_cleanup_status")
     resource_cleanup_error: str | None = Field(default=None, description="Filter by resource_cleanup_error")
 
+    # Sort enum generated from WORK_ITEM_SORTABLE_FIELDS
     sort: Literal[
         "created_at",
         "-created_at",
@@ -61,7 +82,7 @@ class WorkItemListParams(EPListParams):
         "-resource_cleanup_status",
         "id",
         "-id",
-    ] = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
+    ] = Field(default=WORK_ITEM_SORT_DEFAULT, description="Sort field; prefix with '-' for descending order.")
 
 
 class WorkItemListResponse(ResourcesResponse[WorkItemRead]):

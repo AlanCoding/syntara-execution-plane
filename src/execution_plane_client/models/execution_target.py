@@ -18,6 +18,35 @@ _TOLERATION_EFFECTS = {"", "NoSchedule", "PreferNoSchedule", "NoExecute"}
 _MAX_LABEL_NAME_LENGTH = 63
 _MAX_DNS_SUBDOMAIN_LENGTH = 253
 
+# Execution target query metadata - single source of truth for EP and client
+EXECUTION_TARGET_FILTERABLE_FIELDS = [
+    "id",
+    "created_at",
+    "name",
+    "endpoint",
+    "status",
+    "backend_type",
+    "cluster_id",
+    "enabled",
+    "is_default",
+    "last_ran_at",
+    "status_message",
+]
+
+EXECUTION_TARGET_SORTABLE_FIELDS = [
+    "id",
+    "created_at",
+    "name",
+    "endpoint",
+    "status",
+    "backend_type",
+    "cluster_id",
+    "enabled",
+    "is_default",
+]
+
+EXECUTION_TARGET_SORT_DEFAULT = "created_at"
+
 
 class BackendType(StrEnum):
     """Supported execution target backends."""
@@ -153,6 +182,7 @@ class ExecutionTargetListParams(EPListParams):
     created_at: str | None = Field(default=None, description="Filter by created_at")
     last_ran_at: str | None = Field(default=None, description="Filter by last_ran_at")
 
+    # Sort enum generated from EXECUTION_TARGET_SORTABLE_FIELDS
     sort: Literal[
         "id",
         "-id",
@@ -172,7 +202,7 @@ class ExecutionTargetListParams(EPListParams):
         "-enabled",
         "is_default",
         "-is_default",
-    ] = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
+    ] = Field(default=EXECUTION_TARGET_SORT_DEFAULT, description="Sort field; prefix with '-' for descending order.")
 
 
 class ExecutionTargetListResponse(ResourcesResponse[ExecutionTargetRead]):

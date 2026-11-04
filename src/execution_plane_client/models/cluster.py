@@ -8,6 +8,32 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
+# Cluster query metadata - single source of truth for EP and client
+CLUSTER_FILTERABLE_FIELDS = [
+    "id",
+    "created_at",
+    "updated_at",
+    "name",
+    "endpoint",
+    "status",
+    "status_message",
+    "enabled",
+    "is_default",
+]
+
+CLUSTER_SORTABLE_FIELDS = [
+    "id",
+    "created_at",
+    "updated_at",
+    "name",
+    "endpoint",
+    "status",
+    "enabled",
+    "is_default",
+]
+
+CLUSTER_SORT_DEFAULT = "created_at"
+
 
 class ClusterRead(BaseModel):
     """Provisioned cluster state, keyed by the actual cluster UUID."""
@@ -39,6 +65,7 @@ class ClusterListParams(EPListParams):
     created_at: str | None = Field(default=None, description="Filter by created_at")
     updated_at: str | None = Field(default=None, description="Filter by updated_at")
 
+    # Sort enum generated from CLUSTER_SORTABLE_FIELDS
     sort: Literal[
         "id",
         "-id",
@@ -56,7 +83,7 @@ class ClusterListParams(EPListParams):
         "-enabled",
         "is_default",
         "-is_default",
-    ] = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
+    ] = Field(default=CLUSTER_SORT_DEFAULT, description="Sort field; prefix with '-' for descending order.")
 
 
 class ClusterListResponse(ResourcesResponse[ClusterRead]):
