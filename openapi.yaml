@@ -68,6 +68,7 @@ paths:
         required: false
         schema:
           type: string
+          pattern: ^-?[a-z][a-z0-9_]*$
           description: Sort field; prefix with '-' for descending order.
           default: -created_at
           title: Sort
@@ -214,6 +215,7 @@ paths:
         required: false
         schema:
           type: string
+          pattern: ^-?[a-z][a-z0-9_]*$
           description: Sort field; prefix with '-' for descending order.
           default: created_at
           title: Sort
@@ -380,6 +382,7 @@ paths:
         required: false
         schema:
           type: string
+          pattern: ^-?[a-z][a-z0-9_]*$
           description: Sort field; prefix with '-' for descending order.
           default: created_at
           title: Sort

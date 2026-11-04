@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from execution_plane_client.models.shared import EPListParams, ResourcesResponse, _SORT_PATTERN
+from execution_plane_client.models.shared import _SORT_PATTERN, EPListParams, ResourcesResponse
 
 # Work item query metadata - single source of truth for EP and client
 WORK_ITEM_FILTERABLE_FIELDS = [
