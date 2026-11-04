@@ -67,15 +67,6 @@ paths:
         in: query
         required: false
         schema:
-          enum:
-          - created_at
-          - -created_at
-          - status
-          - -status
-          - resource_cleanup_status
-          - -resource_cleanup_status
-          - id
-          - -id
           type: string
           description: Sort field; prefix with '-' for descending order.
           default: -created_at
@@ -278,23 +269,6 @@ paths:
         in: query
         required: false
         schema:
-          enum:
-          - id
-          - -id
-          - created_at
-          - -created_at
-          - updated_at
-          - -updated_at
-          - name
-          - -name
-          - endpoint
-          - -endpoint
-          - status
-          - -status
-          - enabled
-          - -enabled
-          - is_default
-          - -is_default
           type: string
           description: Sort field; prefix with '-' for descending order.
           default: created_at
@@ -538,25 +512,6 @@ paths:
         in: query
         required: false
         schema:
-          enum:
-          - id
-          - -id
-          - created_at
-          - -created_at
-          - name
-          - -name
-          - endpoint
-          - -endpoint
-          - status
-          - -status
-          - backend_type
-          - -backend_type
-          - cluster_id
-          - -cluster_id
-          - enabled
-          - -enabled
-          - is_default
-          - -is_default
           type: string
           description: Sort field; prefix with '-' for descending order.
           default: created_at
