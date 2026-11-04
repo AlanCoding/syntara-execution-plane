@@ -1,7 +1,6 @@
 """Shared cluster list and response contracts."""
 
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -65,25 +64,7 @@ class ClusterListParams(EPListParams):
     created_at: str | None = Field(default=None, description="Filter by created_at")
     updated_at: str | None = Field(default=None, description="Filter by updated_at")
 
-    # Sort enum generated from CLUSTER_SORTABLE_FIELDS
-    sort: Literal[
-        "id",
-        "-id",
-        "created_at",
-        "-created_at",
-        "updated_at",
-        "-updated_at",
-        "name",
-        "-name",
-        "endpoint",
-        "-endpoint",
-        "status",
-        "-status",
-        "enabled",
-        "-enabled",
-        "is_default",
-        "-is_default",
-    ] = Field(default=CLUSTER_SORT_DEFAULT, description="Sort field; prefix with '-' for descending order.")
+    sort: str = Field(default=CLUSTER_SORT_DEFAULT, description="Sort field; prefix with '-' for descending order.")
 
 
 class ClusterListResponse(ResourcesResponse[ClusterRead]):
