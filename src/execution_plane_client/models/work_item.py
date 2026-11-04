@@ -27,8 +27,6 @@ WORK_ITEM_SORTABLE_FIELDS = [
     "id",
 ]
 
-WORK_ITEM_SORT_DEFAULT = "-created_at"
-
 
 class WorkItemStatus(StrEnum):
     """Lifecycle states of a dispatched work item."""
@@ -72,7 +70,7 @@ class WorkItemListParams(EPListParams):
     resource_cleanup_status: str | None = Field(default=None, description="Filter by resource_cleanup_status")
     resource_cleanup_error: str | None = Field(default=None, description="Filter by resource_cleanup_error")
 
-    sort: str = Field(default=WORK_ITEM_SORT_DEFAULT, description="Sort field; prefix with '-' for descending order.")
+    sort: str = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
 
 
 class WorkItemListResponse(ResourcesResponse[WorkItemRead]):

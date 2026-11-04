@@ -45,8 +45,6 @@ EXECUTION_TARGET_SORTABLE_FIELDS = [
     "is_default",
 ]
 
-EXECUTION_TARGET_SORT_DEFAULT = "created_at"
-
 
 class BackendType(StrEnum):
     """Supported execution target backends."""
@@ -182,9 +180,7 @@ class ExecutionTargetListParams(EPListParams):
     created_at: str | None = Field(default=None, description="Filter by created_at")
     last_ran_at: str | None = Field(default=None, description="Filter by last_ran_at")
 
-    sort: str = Field(
-        default=EXECUTION_TARGET_SORT_DEFAULT, description="Sort field; prefix with '-' for descending order."
-    )
+    sort: str = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
 
 
 class ExecutionTargetListResponse(ResourcesResponse[ExecutionTargetRead]):

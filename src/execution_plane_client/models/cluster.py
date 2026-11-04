@@ -31,8 +31,6 @@ CLUSTER_SORTABLE_FIELDS = [
     "is_default",
 ]
 
-CLUSTER_SORT_DEFAULT = "created_at"
-
 
 class ClusterRead(BaseModel):
     """Provisioned cluster state, keyed by the actual cluster UUID."""
@@ -64,7 +62,7 @@ class ClusterListParams(EPListParams):
     created_at: str | None = Field(default=None, description="Filter by created_at")
     updated_at: str | None = Field(default=None, description="Filter by updated_at")
 
-    sort: str = Field(default=CLUSTER_SORT_DEFAULT, description="Sort field; prefix with '-' for descending order.")
+    sort: str = Field(default="created_at", description="Sort field; prefix with '-' for descending order.")
 
 
 class ClusterListResponse(ResourcesResponse[ClusterRead]):
