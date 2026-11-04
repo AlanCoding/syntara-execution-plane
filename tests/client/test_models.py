@@ -130,13 +130,13 @@ def test_list_params_share_resource_specific_sort_defaults() -> None:
 
 
 def test_list_params_have_filter_fields() -> None:
-    """List params have filter fields with standard descriptions."""
+    """List params have filter fields with simple descriptions matching syntara."""
     # Filter fields exist
     assert "id" in ClusterListParams.model_fields
     assert "name" in ClusterListParams.model_fields
     assert "status" in ClusterListParams.model_fields
 
-    # Standard "Filter by X" descriptions
+    # Simple "Filter by X" descriptions like syntara
     assert ClusterListParams.model_fields["name"].description == "Filter by name"
     assert ExecutionTargetListParams.model_fields["endpoint"].description == "Filter by endpoint"
     assert WorkItemListParams.model_fields["status"].description == "Filter by status"

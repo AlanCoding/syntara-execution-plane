@@ -181,7 +181,6 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     @app.get(
         "/v1/work-items",
         responses={422: {"description": "Invalid query parameters or cursor"}},
-        openapi_extra=list_filter_openapi(WorkItem),
     )
     async def work_items(
         request: Request,
@@ -218,7 +217,6 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     @app.get(
         "/v1/clusters",
         responses={422: {"description": "Invalid query parameters or cursor"}},
-        openapi_extra=list_filter_openapi(Cluster),
     )
     async def clusters(
         request: Request,
@@ -255,7 +253,6 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     @app.get(
         "/v1/execution-targets",
         responses={422: {"description": "Invalid query parameters or cursor"}},
-        openapi_extra=list_filter_openapi(ExecutionTarget),
     )
     async def targets(
         request: Request,
