@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from execution_plane.api.auth import ServiceIdentity, get_service_identity, require_scope
-from execution_plane.api.list_queries import list_filter_openapi, list_query_filters
+from execution_plane.api.list_queries import list_query_filters
 from execution_plane.api.openapi import configure_command_openapi
 from execution_plane.api.pagination import (
     generate_response,
@@ -36,9 +36,6 @@ from execution_plane.execution_target.execution_target_store import (
     DefaultExecutionTargetError,
     TargetNotEligibleForDefaultError,
 )
-from execution_plane.models.cluster import Cluster
-from execution_plane.models.execution_target import ExecutionTarget
-from execution_plane.models.work_item import WorkItem
 from execution_plane.work_item.errors import DuplicateWorkItemError, WorkItemNotFoundError
 from execution_plane_client.catalog import CommandCatalog
 from execution_plane_client.commands.results import TransportReceipt
