@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from execution_plane_client.models.shared import EPListParams, ResourcesResponse
 
@@ -70,7 +70,9 @@ class WorkItemListParams(EPListParams):
     resource_cleanup_status: str | None = Field(default=None, description="Filter by resource_cleanup_status")
     resource_cleanup_error: str | None = Field(default=None, description="Filter by resource_cleanup_error")
 
-    sort: str = Field(default="-created_at", description="Sort field; prefix with '-' for descending order.")
+    sort: Annotated[str, StringConstraints(pattern=r"^-?[a-z][a-z0-9_]*$")] = Field(
+        default="-created_at", description="Sort field; prefix with '-' for descending order."
+    )
 
 
 class WorkItemListResponse(ResourcesResponse[WorkItemRead]):
