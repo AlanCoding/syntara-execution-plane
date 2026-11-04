@@ -4,13 +4,15 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
+_SORT_PATTERN = r"^-?[a-z][a-z0-9_]*$"
+
 
 class EPListParams(BaseModel):
     """Query parameters accepted by all EP list endpoints."""
 
     limit: int = Field(default=20, gt=0, le=100)
     cursor: str | None = Field(default=None)
-    sort: Annotated[str, StringConstraints(pattern=r"^-?[a-z][a-z0-9_]*$")] = Field(
+    sort: Annotated[str, StringConstraints(pattern=_SORT_PATTERN)] = Field(
         default="created_at", description="Sort field; prefix with '-' for descending order."
     )
     include_total: bool = Field(default=False)

@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from execution_plane_client.models.shared import EPListParams, ResourcesResponse
+from execution_plane_client.models.shared import EPListParams, ResourcesResponse, _SORT_PATTERN
 
 # Work item query metadata - single source of truth for EP and client
 WORK_ITEM_FILTERABLE_FIELDS = [
@@ -70,7 +70,7 @@ class WorkItemListParams(EPListParams):
     resource_cleanup_status: str | None = Field(default=None, description="Filter by resource_cleanup_status")
     resource_cleanup_error: str | None = Field(default=None, description="Filter by resource_cleanup_error")
 
-    sort: Annotated[str, StringConstraints(pattern=r"^-?[a-z][a-z0-9_]*$")] = Field(
+    sort: Annotated[str, StringConstraints(pattern=_SORT_PATTERN)] = Field(
         default="-created_at", description="Sort field; prefix with '-' for descending order."
     )
 
