@@ -1,10 +1,6 @@
 """Shared list controls and pagination envelopes."""
 
-from typing import Generic, TypeVar
-
 from pydantic import BaseModel, Field
-
-T = TypeVar("T")
 
 
 class EPListParams(BaseModel):
@@ -21,7 +17,7 @@ class EPListParams(BaseModel):
         return self.sort.removeprefix("-"), "desc" if self.sort.startswith("-") else "asc"
 
 
-class ResourcesResponse(BaseModel, Generic[T]):  # noqa: UP046
+class ResourcesResponse[T](BaseModel):
     """Pagination envelope returned by all EP list endpoints."""
 
     resources: list[T]
