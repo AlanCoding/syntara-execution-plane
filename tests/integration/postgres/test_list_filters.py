@@ -262,14 +262,16 @@ async def test_get_openapi_documents_list_filters_and_sort_fields(list_api):
     assert response.status_code == 200
     parameters = response.json()["paths"][list_api.path]["get"]["parameters"]
     by_name = {parameter["name"]: parameter for parameter in parameters}
-    assert {"id", "created_at", "status", "limit", "cursor", "include_total"} <= by_name.keys()
+    assert {"id", "created_at", "status", "limit", "cursor", "include_total", "sort"} <= by_name.keys()
     # Simple "Filter by X" descriptions, no bracket operator documentation
     assert by_name["id"]["description"] == "Filter by id"
     assert by_name["created_at"]["description"] == "Filter by created_at"
-    assert "gte" in by_name["created_at"]["description"]
+    # Bracket operators not documented in OpenAPI
     assert "id[in]" not in by_name
     assert "created_at[gte]" not in by_name
-    assert set(by_name["sort"]["schema"]["enum"]) == {
-        f"{prefix}{field}" for field in SORT_FIELDS[list_api.path] for prefix in ("", "-")
-    }
+    # Sort is a string with default, validated server-side (no enum)
+    assert by_name["sort"]["schema"]["type"] == "string"
+    assert "default" in by_name["sort"]["schema"]
+    assert "enum" not in by_name["sort"]["schema"]  # Server-side validation like syntara
+    # Labels only on cluster/target endpoints
     assert ("labels[key]" in by_name) == (list_api.path != "/v1/work-items")
