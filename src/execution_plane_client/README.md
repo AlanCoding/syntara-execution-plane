@@ -7,7 +7,7 @@ authentication implementation or EP imports are included.
 Participants register their own handlers. EP implements command submission and
 resource queries; the caller handles `work.execute.completed` using this same
 protocol. Commands have no persisted status or child history. A receipt confirms
-that the domain handler returned, not that asynchronous resource work is complete.
+that the domain handler returned. Work execution and resource draining remain asynchronous.
 
 ## Constructing messages
 
@@ -20,11 +20,9 @@ from uuid import uuid4
 from execution_plane_client.commands.clusters import ClusterRegister
 
 message = ClusterRegister(
-    resource_key=uuid4(),
-    desired_revision=1,
+    resource_id=uuid4(),
     name="workers",
     endpoint="https://cluster.example",
-    namespace="execution-plane",
     credential_ref=uuid4(),
 ).to_message(
     source_id="syntara-orchestration",
@@ -65,5 +63,6 @@ available for identity and correlation; partial-update payloads retain which
 fields were supplied. Authentication, authorization and domain-state validation
 (including validation after merging a patch) remain participant responsibilities.
 
-Build with `uv build src/execution_plane_client`. See the service's integration
-documentation for command examples and the current HTTP authentication contract.
+Build with `uv build src/execution_plane_client`. See the service's
+[integration documentation](../../docs/integration.md) for command examples and
+the current HTTP authentication contract.

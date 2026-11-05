@@ -12,26 +12,22 @@ in the merged SDK.
 EP's adapter in [`sdk_adaptor.py`](../src/execution_plane/worker_manager/vanilla_k8s/sdk_adaptor.py) connects
 that client to EP's cancellation, progress, and attempt lifecycle.
 
-## Installing the pinned SDK
+## Dependency and ownership
 
-`pyproject.toml` pins `syntara-plugin-contracts==0.1.0a1` from PyPI. `uv.lock`
-records the selected package version, registry, artifact URLs, and SHA-256
-hashes; the exported `requirements.txt` records the same pinned release and
-hashes for pip/Hermeto builds.
+The SDK dependency is declared in [pyproject.toml](../pyproject.toml), resolved
+in [uv.lock](../uv.lock), and exported with hashes to
+[requirements.txt](../requirements.txt). These files are authoritative for its
+version; documentation does not duplicate it.
 
-Use `uv sync --locked --all-groups` (or `make install`, which runs that
-command) for reproducible installation. It requires access to PyPI but no
-sibling SDK checkout, private index, or developer-local source override.
-Plain `pip install .` can resolve the declared SDK version, but unlike `uv sync`
-it does not use the repository's complete lockfile.
-
-To move to another reviewed SDK release, update the version pin and regenerate
-the lockfile and requirement exports.
+Use `uv sync --locked --all-groups` (or `make install`) for reproducible
+installation. No sibling SDK checkout or developer-local source override is
+required. When updating the dependency, regenerate the lockfile and requirement
+exports alongside the declaration.
 
 ## Command and workload data
 
 `work.execute` retains `image`, `selectors`, and optional `output_config` for
-scheduling. Its invocation is now:
+scheduling. Its invocation is:
 
 ```json
 {
@@ -53,9 +49,10 @@ script identifier. EP supplies an invocation ID derived from the work UUID and
 claim generation, and currently supplies an empty credential-file-path map.
 
 Script environment variables are ordinary inputs. There is no released EP
-credential broker or secret-mount implementation. The removed `credentials`
-field was empty in the script submission path; the new command rejects it and
-caller-supplied `credential_file_paths` rather than pretending files are mounted.
+workload credential broker or secret-mount implementation. The command rejects a
+`credentials` field and caller-supplied
+`credential_file_paths`. The final credential-management design remains unresolved;
+see the [active discussion](https://github.com/ansible/handbook/pull/1824).
 Cluster API authentication remains internal to EP's Kubernetes transport.
 
 ## Execution and outcomes
@@ -73,12 +70,8 @@ Runtime Failure events are separate from deliberate failed Results. Errors
 after Execute may have been submitted never cause automatic replay. A lost
 terminal outcome requires reconciliation. Results are persisted before cleanup.
 
-The old `syntara.node.v1.NodeService` is removed. There is one gRPC service for
-scripts and other plugin workloads: `syntara.container.v1alpha1.ContainerService`.
-AO must submit the new invocation shape, and workload images must implement
-this SDK service. Existing queued old-shape work must be drained before rollout;
-old script images and payloads are incompatible. This pre-release change does
-not install a legacy protocol fallback.
+Workload images implement `syntara.container.v1alpha1.ContainerService` and
+advertise the requested step revision. EP has no legacy NodeService fallback.
 
 ## Test workload
 
@@ -94,5 +87,5 @@ kind load docker-image localhost/syntara-sdk-script:dev --name integration-test
 
 This is the default local helper image. Set `EP_NODE_IMAGE` (or `--image`) and
 `--step-revision-id` to use another SDK-compatible runner. CI builds the fixture
-image instead of pulling the former NodeService image. This fixture is a test
-runner, not the production script runner release.
+image for dispatch tests. This fixture is a test runner, not the production
+script runner release.

@@ -1,7 +1,7 @@
 # Example: volume workspace, three WorkItems, `/workspace` stays
 
 Builds on
-[00-one-workload-default-target.md](00-one-workload-default-target.md).
+[00-one-workload-default-target.md](../../scheduling.md#default-routing).
 Same Cluster, same default ExecutionTarget. AO shares one **workspace**
 volume across three successive WorkItems. Each container mounts it at
 `/workspace`. Files written by an earlier WorkItem are still there for
@@ -14,7 +14,7 @@ another cluster.
 
 AO creates the workspace with a dedicated API call, then submits
 WorkItems that cite that id. WorkItem A places with empty selectors
-([default routing](../executiontarget-reconciler.md#default-routing)).
+([default routing](../../scheduling.md#default-routing)).
 After EP provisions the volume on `ep-default`, B and C **reuse**
 that UUID. That reuse is a **placement constraint**: they run on
 `ep-default` because that is the ExecutionTarget associated with the
@@ -178,7 +178,7 @@ There is no `data.inputs` list and no `payload.volume_mounts`.
 
 ## Registered Cluster and default ExecutionTarget
 
-Same inventory as [example 00](00-one-workload-default-target.md).
+Same inventory as [example 00](../../scheduling.md#default-routing).
 
 ```yaml
 cluster:
@@ -338,9 +338,9 @@ sequenceDiagram
 
 | Omitted | Why |
 |---|---|
-| Empty selectors without a workspace | [Example 00](00-one-workload-default-target.md) |
-| `region` / `env` placement | [Example 01](01-select-region-and-env.md) |
-| Selectors that match nothing | [Example 05](05-no-matching-targets.md) |
+| Empty selectors without a workspace | [Example 00](../../scheduling.md#default-routing) |
+| `region` / `env` placement | [Example 01](../../scheduling.md#selector-examples) |
+| Selectors that match nothing | [Example 05](../../scheduling.md#no-matching-targets) |
 | Object-store workspace snapshot | [Example 03](03-data-sharing-with-workspace-object-store.md) |
 | OpenShell sandbox policy | [Example 04](04-openshell-sandbox-policy.md). OpenShell has no volume attach. |
 | Warm pools | Volume workspace is a cold-start mount in this example |

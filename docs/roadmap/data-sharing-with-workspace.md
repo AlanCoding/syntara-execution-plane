@@ -6,8 +6,8 @@ one Automation Orchestrator (AO) workflow share a directory.
 - Ticket: [AAP-94189](https://redhat.atlassian.net/browse/AAP-94189)
 - Feature: [ANSTRAT-1803](https://redhat.atlassian.net/browse/ANSTRAT-1803)
 - Parent epic: [AAP-82060](https://redhat.atlassian.net/browse/AAP-82060)
-- Labels contract: [labels.md](labels.md)
-- Placement examples: [examples/](examples/)
+- Labels contract: [labels.md](../scheduling.md)
+- Placement examples: [examples/](README.md)
 
 ## What this document is
 
@@ -21,7 +21,7 @@ The **workspace** is the same idea on every backend (Kubernetes PVC or
 Podman volume). This is not a PVC spec, not AO FileManager
 ([file-storage.md](https://github.com/syntara-orchestration/syntara/blob/devel/backend/docs/file-storage.md)), and not the in-container SDK.
 
-Placement stays in [labels.md](labels.md).
+Placement stays in [labels.md](../scheduling.md).
 Volume vs object-store workspace is in
 [example 02](examples/02-data-sharing-with-workspace.md) (same
 cluster, a volume) and
@@ -534,7 +534,7 @@ sequenceDiagram
 
 | Omitted | Why |
 |---|---|
-| Placement / selectors | [labels.md](labels.md) |
+| Placement / selectors | [labels.md](../scheduling.md) |
 | Live PVC / Podman volume or disk capacity as a selector | Not a label. Open question in labels.md. |
 | AO file upload, conversion, RBAC | [file-storage.md](https://github.com/syntara-orchestration/syntara/blob/devel/backend/docs/file-storage.md) |
 | In-container activity SDK | Separate SDK design. Default mount is `/workspace`; coordinate with ANSTRAT-2422. |
@@ -585,11 +585,11 @@ Extension, not this contract.
   object-store snapshot instead of a PVC. Each places via
   selectors. Reuse hydrates `/workspace` from S3 and does **not** pin
   the ExecutionTarget. The next `rw` WorkItem waits for the snapshot.
-- **[labels.md](labels.md):** HTTP and Git activity params and
+- **[labels.md](../scheduling.md):** HTTP and Git activity params and
   workspace UUID are not labels. Reuse of a volume workspace shrinks
   the eligible set to the ExecutionTarget that holds the volume;
   that target must still satisfy the WorkItem's selectors.
-- **[Worker Manager](worker-manager.md):** looks up the workspace id,
+- **[Worker Manager](../execution.md):** looks up the workspace id,
   mounts its volume at `/workspace` (one `rw` mount per id; `ro` /
   `copy` as above). It does not GET object storage or clone Git as
   WorkItem inputs.
@@ -610,7 +610,7 @@ Extension, not this contract.
   example when the execution finishes). **Also:** optional TTL, set by
   the user through AO (ExecutionTarget default if omitted). Clock is
   last unmount. Size comes from the ExecutionTarget.
-- **[Work Store](work-store.md):** `WorkItem.result` stays small JSON.
+- **[Work Store](../execution.md):** `WorkItem.result` stays small JSON.
   Large files stay in the workspace.
 - **[file-storage.md](https://github.com/syntara-orchestration/syntara/blob/devel/backend/docs/file-storage.md):** AO S3 for uploads. AO
   turns file ids into HTTP(S) URLs for the HTTP activity. EP does

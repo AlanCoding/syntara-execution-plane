@@ -2,9 +2,20 @@
 
 The Execution Plane (EP) accepts and runs work dispatched by Syntara. This repository owns the standalone HTTP API, worker package, cluster and execution-target registries, work-item persistence, migrations for the `execution_plane` PostgreSQL schema, and the service container image.
 
-Syntara owns user authorization, workflow dispatch, integrations, and the user interface. EP owns accepted work, execution state, and completion-event delivery. Temporal task tokens stay in Syntara and are not part of the EP API or schema. The first deployment may use the existing PostgreSQL server, but EP requires a distinct database and runtime role.
+Syntara owns user authorization, workflow dispatch, integrations, and the user interface. EP owns accepted work, execution state, and completion-event delivery. Temporal task tokens stay in Syntara and are not part of the EP API or schema. EP requires a distinct database and runtime role; the PostgreSQL server can be shared.
 
-EP is one of several Syntara repositories. [Syntara](https://github.com/syntara-orchestration/syntara) is the orchestrator that accepts user intent and dispatches work; it will take EP as a dependency, since it submits that work to the EP API. The [Syntara Plugin SDK](https://github.com/syntara-orchestration/syntara-plugin-sdk) is a firmly planned direct dependency: it provides the package the container entrypoint runs and the protobuf contract EP speaks to each node over gRPC, so it is shared by both the container images and the wire protocol. [Syntara Step Types](https://github.com/syntara-orchestration/syntara-step-types) defines the step and payload types a workload acts on; because EP routes and runs work through the gRPC contract and stays largely agnostic to the data being passed, it is only a potential dependency and may never become a required one.
+EP is one of several Syntara repositories. [Syntara](https://github.com/syntara-orchestration/syntara)
+owns workflow orchestration and submits work to EP's API. Related workload
+material lives in [Syntara Step Types](https://github.com/syntara-orchestration/syntara-step-types).
+
+EP consumes the [Syntara Plugin SDK](https://github.com/syntara-orchestration/syntara-plugin-sdk)
+container protocol and runs workload images selected by the caller. Dependency
+versions are defined in `pyproject.toml` and the lockfile.
+
+See the [documentation index](docs/README.md) for architecture, integration,
+scheduling, execution, development, and testing guides. Deferred workspace and
+OpenShell designs are preserved under [roadmap](docs/roadmap/README.md), while
+concrete implementation gaps live under [TODOs](docs/todo/README.md).
 
 ## Requirements
 
@@ -58,7 +69,7 @@ EP_API_TLS_CLIENT_CA_PATH=/run/secrets/ep-api/ca.pem \
 uv run execution-plane-api
 ```
 
-The API exposes versioned OpenAPI at `/docs`, authenticated work submission, scoped status reads and cancellation under `/v1`, plus liveness and readiness endpoints. Work moves through `pending`, `claimed`, `dispatched`, and `running`; cancellation of dispatched or running work first returns `cancel_requested`, and only becomes `cancelled` after the gRPC invocation is confirmed stopped. `reconciliation_required` makes an uncertain external outcome visible instead of launching a duplicate. Cancellation by stable request ID creates a tombstone when it races ahead of submission, preventing a late request from starting work. Configure EP-owned HTTPS with `EP_API_PORT`, `EP_API_TLS_CERT_PATH`, and `EP_API_TLS_KEY_PATH`; `EP_API_TLS_CLIENT_CA_PATH` makes the API validate client certificates when provided. SIGINT and SIGTERM trigger clean shutdown, with API in-flight requests bounded by `EP_API_GRACEFUL_SHUTDOWN_SECONDS` (default 20). Kubernetes manifests expect a TLS certificate in `execution-plane-api-tls` whose SAN matches the service DNS name. The first API release also requires signed AO service tokens with an audience, client ID, project ID, and operation scopes.
+The API exposes versioned OpenAPI at `/docs`, authenticated work submission, scoped status reads and cancellation under `/v1`, plus liveness and readiness endpoints. Work moves through `pending`, `claimed`, `dispatched`, and `running`; cancellation of dispatched or running work first returns `cancel_requested`, and only becomes `cancelled` after the gRPC invocation is confirmed stopped. `reconciliation_required` makes an uncertain external outcome visible instead of launching a duplicate. Cancellation of unknown work returns 404; EP does not retain a cancellation tombstone. Configure EP-owned HTTPS with `EP_API_PORT`, `EP_API_TLS_CERT_PATH`, and `EP_API_TLS_KEY_PATH`; `EP_API_TLS_CLIENT_CA_PATH` makes the API validate client certificates when provided. SIGINT and SIGTERM trigger clean shutdown, with API in-flight requests bounded by `EP_API_GRACEFUL_SHUTDOWN_SECONDS` (default 20). Kubernetes manifests expect a TLS certificate in `execution-plane-api-tls` whose SAN matches the service DNS name. The API requires signed AO service tokens with an audience, client ID, and exact command or read scopes.
 
 Run the worker with the same EP database and a fixed AO completion callback URL:
 
@@ -91,19 +102,13 @@ podman build -f Containerfile -t localhost/execution-plane:dev .
 ```
 
 The independent local compose stack is started from this repository with
-`make setup && uvx podman-compose up --build`. The worker submits each script as a
-short-lived Kubernetes Job in the selected execution target. Configure
-`EP_WORKLOAD_RUNNER_IMAGE` to an image available to that target cluster and grant
-the stored target credential permission to create/read Secrets, Jobs, Pods, Pod
-logs, and NetworkPolicies in the configured namespace. `EP_WORKLOAD_ALLOWED_EGRESS_CIDRS`
-is an operator-reviewed JSON list of destinations the workload may reach; without
-it, workloads can resolve DNS but have no general egress. If a whole IP family is
-allowed, also set `EP_WORKLOAD_FORBIDDEN_EGRESS_CIDRS` to the AO, Temporal,
-Execution Plane, and database address ranges that must remain unreachable.
-Per-integration Kubernetes API trust roots are stored encrypted in EP.
+`make setup && uvx podman-compose up --build`. The worker submits work as a
+short-lived Kubernetes Job in the selected execution target. The caller supplies
+the SDK-compatible workload image in the command. See
+[local development](docs/development.md) for target registration and fixture-image setup.
 
 The target-cluster service account needs `create/get/delete` on Jobs, `list` on
-Pods, `get` on `pods/portforward`, and `create/get/list/patch/delete` on
+Pods, `get/create` on `pods/portforward`, and `create/get/list/patch/delete` on
 NetworkPolicies, plus cluster-scoped `get` on Namespaces for the Resource
 Monitor. It does not need workload Secret, Pod-log, or Pod-exec permissions.
 That Role is `deploy/kubernetes/execution-target/rbac.yaml`.
@@ -117,22 +122,21 @@ API trust roots and submitted invocation payloads are encrypted at rest by EP.
 
 Local helper scripts under `tools/` cover the rest of a first bring-up. EP does
 not issue tokens; `tools/generate_jwt_for_ep.py` signs an AO service JWT with the
-local or sibling Syntara ES256 key. Submit requires a `project_id` claim.
+local or sibling Syntara ES256 key. Work submission requires `work.execute` scope.
 `tools/deploy_kind_execution_target.py` creates a kind cluster, applies
-`deploy/kubernetes/execution-target/rbac.yaml`, and registers it through a
-cluster binding. `tools/submit_work_item.py` posts a script work item to the
+`deploy/kubernetes/execution-target/rbac.yaml`, and registers it through the Cluster
+command API. `tools/submit_work_item.py` posts a script work item to the
 local API.
 
 ```bash
 make setup
 uvx podman-compose up --build -d
 
-# Service token for curl. Submit needs --project-id.
+# Service token for curl
 uv run python -m tools.generate_jwt_for_ep
-uv run python -m tools.generate_jwt_for_ep --project-id 00000000-0000-0000-0000-000000000001
 
-# Kind cluster + default ExecutionTarget (needs kind and kubectl)
-uv run python -m tools.deploy_kind_execution_target
+# Kind cluster + default ExecutionTarget (use an actual AO credential UUID)
+uv run python -m tools.deploy_kind_execution_target --credential-ref 00000000-0000-0000-0000-000000000001
 
 # Submit a script work item; --wait polls until it is terminal
 uv run python -m tools.submit_work_item
@@ -153,7 +157,7 @@ database URLs, AES key, AO JWT verification key, outbound mTLS material, server
 TLS certificate, and AO completion-notification/credential-resolution/JWT issuer URLs as Kubernetes Secrets and a
 ConfigMap before applying them. Target-cluster dispatcher RBAC is
 `deploy/kubernetes/execution-target/rbac.yaml`. AO supplies the node image reference in the
-request and must pin it by digest. EP applies a NetworkPolicy before creating the
+request; use a digest to select an immutable workload image. EP applies a NetworkPolicy before creating the
 Job; it denies ingress and permits only DNS plus configured egress CIDRs. Verify
 that the target cluster's CNI enforces NetworkPolicy before enabling script
 workloads.
@@ -166,7 +170,7 @@ Use this repository for EP worker, registry, migration, and placement changes. M
 
 ## Command API and shared contracts
 
-All mutations use `POST /v1/commands`. Work, cluster-binding and execution-target
+All mutations use `POST /v1/commands`. Work, Cluster and execution-target
 state is available through the resource query endpoints. Commands are not
 persisted, and no command-status or child-history endpoint is provided. Work
 completion is delivered as a `work.execute.completed` command.
@@ -175,5 +179,6 @@ The separately installable `src/execution_plane_client` package contains only
 command contracts, validation, the handler registry and handler protocol. EP
 owns the routes, handlers and existing domain persistence. See
 [the integration contract](docs/integration.md) for payloads, permissions,
-resource identities and outbound notification configuration. The former REST mutation API
-and completion-event wire format are replaced.
+resource identities and outbound notification configuration. The final
+credential-management design remains unresolved; see the
+[active discussion](https://github.com/ansible/handbook/pull/1824).

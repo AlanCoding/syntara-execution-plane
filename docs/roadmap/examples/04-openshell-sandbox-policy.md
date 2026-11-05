@@ -1,8 +1,8 @@
 # Example: OpenShell ExecutionTarget and sandbox policy
 
 Builds on
-[00-one-workload-default-target.md](00-one-workload-default-target.md)
-and [01-select-region-and-env.md](01-select-region-and-env.md).
+[00-one-workload-default-target.md](../../scheduling.md#default-routing)
+and [01-select-region-and-env.md](../../scheduling.md#selector-examples).
 The Cluster still has a protected default Kubernetes target. OpenShell
 is a second ExecutionTarget, so work must **select** it. The workload
 also carries a sandbox policy.
@@ -18,13 +18,13 @@ EP still only sees the submitted WorkItem.
 
 `ep-openshell` is not the Cluster default (`is_default` stays on the
 Kubernetes target). Empty selectors would take [default
-routing](../executiontarget-reconciler.md#default-routing) to
+routing](../../scheduling.md#default-routing) to
 `ep-default`. To land on OpenShell, AO sends a selector that matches a
 label on that target.
 
 `backend_type` remains a discrete field: it selects
 `WorkerManagerOpenShell` **after** the target is chosen. Work matching
-does not read that field. [labels.md](../labels.md) allows the value
+does not read that field. [labels.md](../../scheduling.md) allows the value
 to be **copied onto labels** when work needs to select on it. That
 copy is the selector in this example (`backend_type=openshell`).
 
@@ -212,9 +212,9 @@ that the default does not carry exclude it. That is intended.
 
 | Omitted | Why |
 |---|---|
-| Empty selectors / default routing | [Example 00](00-one-workload-default-target.md) |
-| `region` / `env` placement | [Example 01](01-select-region-and-env.md) |
-| Selectors that match nothing | [Example 05](05-no-matching-targets.md) |
+| Empty selectors / default routing | [Example 00](../../scheduling.md#default-routing) |
+| `region` / `env` placement | [Example 01](../../scheduling.md#selector-examples) |
+| Selectors that match nothing | [Example 05](../../scheduling.md#no-matching-targets) |
 | Volume workspace | [Example 02](02-data-sharing-with-workspace.md) |
 | Object-store workspace | [Example 03](03-data-sharing-with-workspace-object-store.md) |
 | Isolation Policy DSL vs native OpenShell YAML | Open question on AAP-92726 |

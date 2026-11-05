@@ -1,7 +1,7 @@
 # Example: object-store workspace, three WorkItems, different targets
 
 Builds on
-[01-select-region-and-env.md](01-select-region-and-env.md)
+[01-select-region-and-env.md](../../scheduling.md#selector-examples)
 and [02-data-sharing-with-workspace.md](02-data-sharing-with-workspace.md).
 
 This is **example 02 with S3 instead of a PVC.** Same three
@@ -170,7 +170,7 @@ There is no `data.inputs` list and no `payload.volume_mounts`.
 ## Registered Clusters and ExecutionTargets
 
 Two OpenShift Clusters. Each has only its protected default
-ExecutionTarget. Same shape as [example 01](01-select-region-and-env.md),
+ExecutionTarget. Same shape as [example 01](../../scheduling.md#selector-examples),
 without the extra production namespace.
 
 ```yaml
@@ -332,9 +332,9 @@ sequenceDiagram
 | Omitted | Why |
 |---|---|
 | Volume workspace (same UUID pins the ExecutionTarget) | [Example 02](02-data-sharing-with-workspace.md) |
-| Empty selectors / default routing | [Example 00](00-one-workload-default-target.md) |
-| `env=production` namespace | [Example 01](01-select-region-and-env.md) |
-| Selectors that match nothing | [Example 05](05-no-matching-targets.md) |
+| Empty selectors / default routing | [Example 00](../../scheduling.md#default-routing) |
+| `env=production` namespace | [Example 01](../../scheduling.md#selector-examples) |
+| Selectors that match nothing | [Example 05](../../scheduling.md#no-matching-targets) |
 | OpenShell sandbox policy | [Example 04](04-openshell-sandbox-policy.md). Snapshot hydrate is how OpenShell can share `/workspace`. |
 | `ro` / `copy` in parallel | [data-sharing-with-workspace.md](../data-sharing-with-workspace.md). After a generation is `available`, many `ro` or `copy` WorkItems may run. |
 | Snapshot format (tar vs prefix) | Open question in [data-sharing-with-workspace.md](../data-sharing-with-workspace.md) |
